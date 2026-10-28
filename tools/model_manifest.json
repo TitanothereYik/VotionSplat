@@ -1,0 +1,191 @@
+{
+  "source": "docs/Votion_3DGS_2.0_Index.md \u2014 Model filenames (from the two ComfyUI graphs). No invented sizes. Optional nvfp4 and GGUF Q4 omitted (not 3090 Quality default). SphereSfM binary waits until Reconstruct. Florence Hub is in the florence object, not this files list.",
+  "comfy_root": "D:\\ComfyUI_windows_portable_360",
+  "dest_root": "models",
+  "files": [
+    {
+      "id": "krea",
+      "label": "Krea 2 fp8",
+      "repo": "Comfy-Org/Krea-2",
+      "hf_filename": "diffusion_models/krea2_turbo_fp8_scaled.safetensors",
+      "filename": "krea2_turbo_fp8_scaled.safetensors",
+      "local_relative_path": "diffusion_models/krea2_turbo_fp8_scaled.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/Krea-2/resolve/main/diffusion_models/krea2_turbo_fp8_scaled.safetensors",
+      "public": true,
+      "sets": [
+        "p1",
+        "all"
+      ]
+    },
+    {
+      "id": "lora",
+      "label": "360 T2I LoRA",
+      "repo": "mickmumpitz/Krea2-360-ERP-LoRAs",
+      "hf_filename": "krea2_t2i_360_erp_lora_v1.safetensors",
+      "filename": "krea2_t2i_360_erp_lora_v1.safetensors",
+      "local_relative_path": "loras/krea2_t2i_360_erp_lora_v1.safetensors",
+      "url": "https://huggingface.co/mickmumpitz/Krea2-360-ERP-LoRAs/resolve/main/krea2_t2i_360_erp_lora_v1.safetensors",
+      "public": true,
+      "sets": [
+        "p1",
+        "all"
+      ]
+    },
+    {
+      "id": "lora_outpaint",
+      "label": "360 outpaint LoRA",
+      "repo": "mickmumpitz/Krea2-360-ERP-LoRAs",
+      "hf_filename": "krea2_oedit_360_erp_outpaint_lora_v1.safetensors",
+      "filename": "krea2_oedit_360_erp_outpaint_lora_v1.safetensors",
+      "local_relative_path": "loras/krea2_oedit_360_erp_outpaint_lora_v1.safetensors",
+      "url": "https://huggingface.co/mickmumpitz/Krea2-360-ERP-LoRAs/resolve/main/krea2_oedit_360_erp_outpaint_lora_v1.safetensors",
+      "public": true,
+      "sets": [
+        "p1",
+        "all"
+      ]
+    },
+    {
+      "id": "clip",
+      "label": "CLIP qwen3vl",
+      "repo": "Comfy-Org/Krea-2",
+      "hf_filename": "text_encoders/qwen3vl_4b_fp8_scaled.safetensors",
+      "filename": "qwen3vl_4b_fp8_scaled.safetensors",
+      "local_relative_path": "text_encoders/qwen3vl_4b_fp8_scaled.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/Krea-2/resolve/main/text_encoders/qwen3vl_4b_fp8_scaled.safetensors",
+      "public": true,
+      "sets": [
+        "p1",
+        "all"
+      ]
+    },
+    {
+      "id": "vae",
+      "label": "wan_2.1_vae",
+      "repo": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+      "hf_filename": "split_files/vae/wan_2.1_vae.safetensors",
+      "filename": "wan_2.1_vae.safetensors",
+      "local_relative_path": "vae/wan_2.1_vae.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/vae/wan_2.1_vae.safetensors",
+      "public": true,
+      "sets": [
+        "p1",
+        "all"
+      ]
+    },
+    {
+      "id": "realesrgan",
+      "label": "RealESRGAN x2",
+      "repo": "ai-forever/Real-ESRGAN",
+      "hf_filename": "RealESRGAN_x2.pth",
+      "filename": "RealESRGAN_x2.pth",
+      "local_relative_path": "upscale_models/RealESRGAN_x2.pth",
+      "url": "https://huggingface.co/ai-forever/Real-ESRGAN/resolve/main/RealESRGAN_x2.pth",
+      "public": true,
+      "sets": [
+        "p1",
+        "all"
+      ]
+    },
+    {
+      "id": "wan14",
+      "label": "WAN 14B fp8",
+      "repo": "Kijai/WanVideo_comfy",
+      "hf_filename": "Wan2_1-I2V-14B-720P_fp8_e4m3fn.safetensors",
+      "filename": "Wan2_1-I2V-14B-720P_fp8_e4m3fn.safetensors",
+      "local_relative_path": "diffusion_models/Wan2_1-I2V-14B-720P_fp8_e4m3fn.safetensors",
+      "url": "https://huggingface.co/Kijai/WanVideo_comfy/blob/main/Wan2_1-I2V-14B-720P_fp8_e4m3fn.safetensors",
+      "public": true,
+      "sets": [
+        "all"
+      ],
+      "check_free_space": true
+    },
+    {
+      "id": "lora_pano",
+      "label": "Pano360 LoRA",
+      "repo": "mickmumpitz/Wan2.1-Pano360-LoRA",
+      "hf_filename": "pano_video_gen_720p_comfy.safetensors",
+      "filename": "pano_video_gen_720p_comfy.safetensors",
+      "local_relative_path": "loras/pano_video_gen_720p_comfy.safetensors",
+      "url": "https://huggingface.co/mickmumpitz/Wan2.1-Pano360-LoRA/blob/main/pano_video_gen_720p_comfy.safetensors",
+      "public": true,
+      "sets": [
+        "all"
+      ]
+    },
+    {
+      "id": "lora_lightx2v",
+      "label": "LightX2V LoRA",
+      "repo": "Kijai/WanVideo_comfy",
+      "hf_filename": "Lightx2v/lightx2v_T2V_14B_cfg_step_distill_v2_lora_rank64_bf16.safetensors",
+      "filename": "lightx2v_T2V_14B_cfg_step_distill_v2_lora_rank64_bf16.safetensors",
+      "local_relative_path": "loras/lightx2v_T2V_14B_cfg_step_distill_v2_lora_rank64_bf16.safetensors",
+      "url": "https://huggingface.co/Kijai/WanVideo_comfy/blob/main/Lightx2v/lightx2v_T2V_14B_cfg_step_distill_v2_lora_rank64_bf16.safetensors",
+      "public": true,
+      "sets": [
+        "all"
+      ]
+    },
+    {
+      "id": "umt5",
+      "label": "UMT5 xxL fp8",
+      "repo": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+      "hf_filename": "split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+      "filename": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+      "local_relative_path": "text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/blob/main/split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+      "public": true,
+      "sets": [
+        "all"
+      ]
+    },
+    {
+      "id": "clip_vision",
+      "label": "CLIP vision H",
+      "repo": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+      "hf_filename": "split_files/clip_vision/clip_vision_h.safetensors",
+      "filename": "clip_vision_h.safetensors",
+      "local_relative_path": "clip_vision/clip_vision_h.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/blob/main/split_files/clip_vision/clip_vision_h.safetensors",
+      "public": true,
+      "sets": [
+        "all"
+      ]
+    },
+    {
+      "id": "ultrasharp",
+      "label": "4x-UltraSharp",
+      "repo": "Kim2091/UltraSharp",
+      "hf_filename": "4x-UltraSharp.pth",
+      "filename": "4x-UltraSharp.pth",
+      "local_relative_path": "upscale_models/4x-UltraSharp.pth",
+      "url": "https://huggingface.co/Kim2091/UltraSharp/blob/main/4x-UltraSharp.pth",
+      "public": true,
+      "sets": [
+        "all"
+      ]
+    },
+    {
+      "id": "moge",
+      "label": "MoGe vitl",
+      "repo": "Ruicheng/moge-vitl",
+      "hf_filename": "model.pt",
+      "filename": "model.pt",
+      "local_relative_path": "MoGe/model.pt",
+      "url": "https://huggingface.co/Ruicheng/moge-vitl/resolve/main/model.pt",
+      "public": true,
+      "sets": [
+        "p2",
+        "all"
+      ]
+    }
+  ],
+  "info_rows": [],
+  "florence": {
+    "hub_id": "florence-community/Florence-2-large",
+    "revision": "4271c66b88cdbc05735372ec13b2360108de5317",
+    "task": "<CAPTION>",
+    "note": "Pinned after first successful engine.workers.caption. Do not invent a quantized fork."
+  }
+}

@@ -1,0 +1,1 @@
+"""Phase 1 panorama helpers. Workers import torch; the Qt process uses warp_preview only."""

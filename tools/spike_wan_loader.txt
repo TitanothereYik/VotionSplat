@@ -1,0 +1,216 @@
+{
+  "locked": {
+    "first_slice": "WAN 14B already in models/",
+    "wan_loader": "spike_then_pick",
+    "dualres_8192": "json_input_types (max_num_features)",
+    "sfm_when": "generate_then_recon_shows",
+    "confirm_play": "play_each",
+    "max_rails": 5,
+    "rail_files": "per_rail_dir",
+    "first_open_defaults": "smpl_four"
+  },
+  "files": {
+    "unet": {
+      "path": "D:\\Votion3DGS\\models\\diffusion_models\\Wan2_1-I2V-14B-720P_fp8_e4m3fn.safetensors",
+      "exists": true,
+      "bytes": 16993877896
+    },
+    "vae": {
+      "path": "D:\\Votion3DGS\\models\\vae\\wan_2.1_vae.safetensors",
+      "exists": true,
+      "bytes": 253815318
+    },
+    "pano_lora": {
+      "path": "D:\\Votion3DGS\\models\\loras\\pano_video_gen_720p_comfy.safetensors",
+      "exists": true,
+      "bytes": 306809616
+    },
+    "lightx2v": {
+      "path": "D:\\Votion3DGS\\models\\loras\\lightx2v_T2V_14B_cfg_step_distill_v2_lora_rank64_bf16.safetensors",
+      "exists": true,
+      "bytes": 630697104
+    },
+    "umt5": {
+      "path": "D:\\Votion3DGS\\models\\text_encoders\\umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+      "exists": true,
+      "bytes": 6735906897
+    },
+    "clip_vision": {
+      "path": "D:\\Votion3DGS\\models\\clip_vision\\clip_vision_h.safetensors",
+      "exists": true,
+      "bytes": 1264219396
+    }
+  },
+  "imports": {
+    "torch": {
+      "ok": true,
+      "version": "2.11.0+cu128"
+    },
+    "diffusers": {
+      "ok": true,
+      "version": "0.40.0"
+    },
+    "accelerate": {
+      "ok": true,
+      "version": "1.14.0"
+    },
+    "transformers": {
+      "ok": true,
+      "version": "5.16.1"
+    },
+    "safetensors": {
+      "ok": true,
+      "version": "0.8.0"
+    },
+    "peft": {
+      "ok": false,
+      "error": "ModuleNotFoundError: No module named 'peft'"
+    },
+    "sageattention": {
+      "ok": false,
+      "error": "ModuleNotFoundError: No module named 'sageattention'"
+    },
+    "diffsynth": {
+      "ok": false,
+      "error": "ModuleNotFoundError: No module named 'diffsynth'"
+    },
+    "xfuser": {
+      "ok": false,
+      "error": "ModuleNotFoundError: No module named 'xfuser'"
+    },
+    "modelscope": {
+      "ok": false,
+      "error": "ModuleNotFoundError: No module named 'modelscope'"
+    }
+  },
+  "vram_start": "alloc=0.00GB free=24.47/25.77GB",
+  "matrix3d": {
+    "script": "SkyworkAI/Matrix-3D code/panoramic_image_to_video.py",
+    "uses": "DiffSynth-Studio WanVideoPipeline + torchrun + xfuser + nccl",
+    "wants_weights": "Wan-AI/Wan2.1-I2V-14B-720P 7-shard + pano_video_gen_720p.bin (not Comfy keys)",
+    "our_weights": "Kijai fp8 single file + pano_video_gen_720p_comfy.safetensors + LightX2V",
+    "same_safetensors": false,
+    "nccl_available": false,
+    "gloo_available": true,
+    "diffsynth": {
+      "ok": false,
+      "error": "ModuleNotFoundError: No module named 'diffsynth'"
+    },
+    "xfuser": {
+      "ok": false,
+      "error": "ModuleNotFoundError: No module named 'xfuser'"
+    },
+    "modelscope": {
+      "ok": false,
+      "error": "ModuleNotFoundError: No module named 'modelscope'"
+    },
+    "import_ok": false,
+    "windows_run_ok": false,
+    "reason": "script requires nccl torchrun, DiffSynth WanVideoPipeline, and Wan-AI 7-shard checkpoints + DiffSynth .bin LoRA. Product files are Comfy/Kijai safetensors + LightX2V. Not a thin loader of the same files."
+  },
+  "diffusers_symbols": {
+    "version": "0.40.0",
+    "wan_names": [
+      "AutoencoderKLWan",
+      "Wan22Blocks",
+      "Wan22Image2VideoBlocks",
+      "Wan22Image2VideoModularPipeline",
+      "Wan22ModularPipeline",
+      "WanAnimate2Blocks",
+      "WanAnimate2DistilledBlocks",
+      "WanAnimate2DistilledModularPipeline",
+      "WanAnimate2ModularPipeline",
+      "WanAnimate2Transformer3DModel",
+      "WanAnimatePipeline",
+      "WanAnimateTransformer3DModel",
+      "WanBlocks",
+      "WanImage2VideoAutoBlocks",
+      "WanImage2VideoModularPipeline",
+      "WanImageToVideoPipeline",
+      "WanModularPipeline",
+      "WanPipeline",
+      "WanTransformer3DModel",
+      "WanVACEPipeline",
+      "WanVACETransformer3DModel",
+      "WanVideoToVideoPipeline"
+    ],
+    "WanImageToVideoPipeline": true,
+    "WanPipeline": true,
+    "WanTransformer3DModel": true,
+    "AutoencoderKLWan": true,
+    "FlowMatchEulerDiscreteScheduler": true
+  },
+  "lora_keys": {
+    "pano": {
+      "file": "pano_video_gen_720p_comfy.safetensors",
+      "n_keys": 800,
+      "sample": [
+        "diffusion_model.blocks.0.cross_attn.k.lora_down.weight",
+        "diffusion_model.blocks.0.cross_attn.k.lora_up.weight",
+        "diffusion_model.blocks.0.cross_attn.o.lora_down.weight",
+        "diffusion_model.blocks.0.cross_attn.o.lora_up.weight",
+        "diffusion_model.blocks.0.cross_attn.q.lora_down.weight",
+        "diffusion_model.blocks.0.cross_attn.q.lora_up.weight"
+      ],
+      "has_diffusion_model": true,
+      "has_lora_down": true,
+      "has_lora_A": false
+    },
+    "lightx2v": {
+      "file": "lightx2v_T2V_14B_cfg_step_distill_v2_lora_rank64_bf16.safetensors",
+      "n_keys": 1459,
+      "sample": [
+        "diffusion_model.blocks.0.cross_attn.k.diff_b",
+        "diffusion_model.blocks.0.cross_attn.k.lora_down.weight",
+        "diffusion_model.blocks.0.cross_attn.k.lora_up.weight",
+        "diffusion_model.blocks.0.cross_attn.norm_k.diff",
+        "diffusion_model.blocks.0.cross_attn.norm_q.diff",
+        "diffusion_model.blocks.0.cross_attn.o.diff_b"
+      ],
+      "has_diffusion_model": true,
+      "has_lora_down": true,
+      "has_lora_A": false
+    }
+  },
+  "diffusers_vae": {
+    "file": "D:\\Votion3DGS\\models\\vae\\wan_2.1_vae.safetensors",
+    "vram_before": "alloc=0.00GB free=24.47/25.77GB",
+    "ok": true,
+    "seconds": 1.2,
+    "vram_after_cuda": "alloc=0.53GB free=23.93/25.77GB"
+  },
+  "diffusers_transformer": {
+    "file": "D:\\Votion3DGS\\models\\diffusion_models\\Wan2_1-I2V-14B-720P_fp8_e4m3fn.safetensors",
+    "vram_before": "alloc=0.00GB free=24.47/25.77GB",
+    "load_dtype": "float8_e4m3fn",
+    "param_dtype": "torch.float8_e4m3fn",
+    "config": {
+      "patch_size": [
+        1,
+        2,
+        2
+      ],
+      "num_attention_heads": 40,
+      "attention_head_dim": 128,
+      "in_channels": 36,
+      "out_channels": 16,
+      "text_dim": 4096,
+      "freq_dim": 256,
+      "ffn_dim": 13824,
+      "num_layers": 40,
+      "cross_attn_norm": true,
+      "qk_norm": "rms_norm_across_heads",
+      "eps": 1e-06
+    },
+    "cuda": true,
+    "cuda_dtype": "torch.float8_e4m3fn",
+    "vram_after_cuda": "alloc=16.86GB free=7.60/25.77GB",
+    "ok": true,
+    "seconds": 17.1,
+    "vram_after": "alloc=0.00GB free=24.47/25.77GB"
+  },
+  "pick": {
+    "winner": "diffusers_WanTransformer3DModel.from_single_file",
+    "note": "Diffusers loaded the Kijai fp8 UNET on this 3090. Matrix-3D script is not a thin loader of the same safetensors (DiffSynth + NCCL + Wan-AI 7-shard)."
+  }
+}

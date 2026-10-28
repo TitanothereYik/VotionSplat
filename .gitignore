@@ -1,0 +1,37 @@
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+.idea/
+.vscode/
+*.log
+
+# Hugging Face hub + Xet cache (must live on D:, not C:\Users\…\.cache)
+.hf_cache/
+
+# Weights and scene outputs (downloaded / generated, not source)
+models/**
+!models/.gitkeep
+outputs/**
+!outputs/.gitkeep
+bin/**
+!bin/.gitkeep
+vendor/splatkit/**
+!vendor/splatkit/.gitkeep
+vendor/moge/**
+!vendor/moge/.gitkeep
+vendor/comfyui/**
+!vendor/comfyui/.gitkeep
+vendor/ultimatesd/**
+!vendor/ultimatesd/.gitkeep
+vendor/mickmumpitz-nodes/**
+!vendor/mickmumpitz-nodes/.gitkeep
+vendor/ostris-edit/**
+!vendor/ostris-edit/.gitkeep
+vendor/litegs/**
+!vendor/litegs/.gitkeep
+vendor/litegs_build/**

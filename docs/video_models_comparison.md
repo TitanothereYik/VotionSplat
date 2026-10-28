@@ -1,0 +1,11 @@
+# Video Generation Models Comparison: MiniMax H3 vs Wan 2.2 vs LTX 2.5
+
+| Feature | **MiniMax H3** | **Wan 2.2** | **LTX 2.5 (Fast / Pro)** |
+| :--- | :--- | :--- | :--- |
+| **Max Resolution** | **768p** natively (local); **2K** via cloud API upscaler (`H3-Regenerate-2K`) | **720p** (1280x720) default; can be upscaled using standard ComfyUI workflows | **4K (3840x2160)** HDR / RAW support natively on Fast model |
+| **FPS Support** | Native **24 FPS** only | Default **24 FPS** (often capped or down-sampled to 16 FPS by community for optimization) | Highly flexible: **24, 25, 48, or 50 FPS** |
+| **Hardware Requirements** | Heavy. Requires minimum **24GB+ VRAM** (RTX 3090/4090) due to huge text encoders; works best with 32GB–48GB+ VRAM. | Highly optimized. Can run on consumer cards with **12GB–16GB VRAM** using offloading. | Variable. Distilled models can run on **16GB VRAM** (even RTX 4060ti/5060ti); enterprise needs dual GPUs for 4K. |
+| **Model File Size** | **Massive (~50GB+ total)**. 33.1B dense transformer + Qwen3-VL-32B text encoder. | **Lightweight (~15GB–20GB total)**. Built on an efficient 5B parameter video architecture. | **Medium (~30GB–40GB total)** for the 22B distilled / base parameter model package. |
+| **ControlNet / Depth Map** | Very limited natively; handles image and **audio/video references** (Ref2VA) but lacks granular spatial control maps. | **Excellent community support**. Massive library of fine-tuned LoRAs and early-stage spatial control adapter workflows. | **Native Multi-Shot and IC-Lora** support; built directly for advanced professional video control pipelines. |
+| **Audio Generation** | **Yes (Native)**. Generates 32kHz stereo voice, sound effects, and music in the same single pass. | **No**. Silent video output only; audio must be added via secondary models post-generation. | **Yes (Native)**. High-fidelity audio-to-video and text-to-audio-video synchronization. |
+| **Licensing & Open Source** | Conditionally open weights. Geographically restricted (locked out of US, EU, UK, Korea). | **Fully Open Source** (Apache 2.0 / Permissive research license). | **Fully Open Weights**. Free commercial use for entities under \$10M ARR; no forced branding. |

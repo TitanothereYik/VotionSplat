@@ -1,0 +1,81 @@
+## meta
+written=2026-09-07T08:10:43.377584+00:00
+executable=D:\Votion3DGS\.venv\Scripts\python.exe
+version_string=2.0
+
+## python --version
+Python 3.12.10
+
+## nvidia-smi
+Mon Sep  7 16:10:43 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 595.79                 Driver Version: 595.79         CUDA Version: 13.2     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                  Driver-Model | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA GeForce RTX 3090      WDDM  |   00000000:61:00.0  On |                  N/A |
+| 36%   35C    P8             36W /  370W |    4909MiB /  24576MiB |     13%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|    0   N/A  N/A            4816    C+G   ...indows-x86_64-none\python.exe      N/A      |
+|    0   N/A  N/A           11056    C+G   ...ayRenderer-Win64-Shipping.exe      N/A      |
+|    0   N/A  N/A           11724    C+G   ...tware\Current\LogiOverlay.exe      N/A      |
+|    0   N/A  N/A           13220    C+G   ...aries\Win64\EpicWebHelper.exe      N/A      |
+|    0   N/A  N/A           13504    C+G   ...xyewy\ShellExperienceHost.exe      N/A      |
+|    0   N/A  N/A           14656    C+G   ...AcrobatNotificationClient.exe      N/A      |
+|    0   N/A  N/A           15772      C   ...s\Python\Python312\python.exe      N/A      |
+|    0   N/A  N/A           16104    C+G   C:\Windows\explorer.exe               N/A      |
+|    0   N/A  N/A           17224    C+G   ....0.4191.53\msedgewebview2.exe      N/A      |
+|    0   N/A  N/A           17232    C+G   ...y\Comet\Application\comet.exe      N/A      |
+|    0   N/A  N/A           17804    C+G   ...h_cw5n1h2txyewy\SearchApp.exe      N/A      |
+|    0   N/A  N/A           19436    C+G   ...c\AdobeNotificationClient.exe      N/A      |
+|    0   N/A  N/A           20180    C+G   ...5n1h2txyewy\TextInputHost.exe      N/A      |
+|    0   N/A  N/A           20572    C+G   ...Files\Surfshark\Surfshark.exe      N/A      |
+|    0   N/A  N/A           22764    C+G   ...s\Win64\EpicGamesLauncher.exe      N/A      |
+|    0   N/A  N/A           23504    C+G   ...\Creative Cloud UI Helper.exe      N/A      |
+|    0   N/A  N/A           23544    C+G   ...al\Programs\Notion\Notion.exe      N/A      |
+|    0   N/A  N/A           23760    C+G   ...4__8wekyb3d8bbwe\Video.UI.exe      N/A      |
+|    0   N/A  N/A           24076    C+G   ...lpaper_engine\wallpaper32.exe      N/A      |
+|    0   N/A  N/A           25608    C+G   ...lus\logioptionsplus_agent.exe      N/A      |
+|    0   N/A  N/A           32020    C+G   ...grams\artlist\Artlist Hub.exe      N/A      |
+|    0   N/A  N/A           36320    C+G   ...4__8wekyb3d8bbwe\ms-teams.exe      N/A      |
+|    0   N/A  N/A           38744    C+G   ...Chrome\Application\chrome.exe      N/A      |
+|    0   N/A  N/A           39908    C+G   ...cord\app-1.0.9256\Discord.exe      N/A      |
+|    0   N/A  N/A           44172    C+G   ...ogram Files\cursor\Cursor.exe      N/A      |
+|    0   N/A  N/A           45988    C+G   ....0.4191.62\msedgewebview2.exe      N/A      |
+|    0   N/A  N/A           46108    C+G   ...Chrome\Application\chrome.exe      N/A      |
+|    0   N/A  N/A           52008    C+G   ...8bbwe\PhoneExperienceHost.exe      N/A      |
++-----------------------------------------------------------------------------------------+
+
+## torch
+torch.__version__=2.11.0+cu128
+torch.version.cuda=12.8
+torch.cuda.is_available()=True
+torch.cuda.device_count()=1
+torch.cuda.get_device_name(0)=NVIDIA GeForce RTX 3090
+
+## gsplat spike
+PATH prepended with venv Scripts for ninja.exe: D:\Votion3DGS\.venv\Scripts
+torch small→is_small: already (D:\Votion3DGS\.venv\Lib\site-packages\torch\include\c10\cuda\CUDACachingAllocator.h)
+gsplat -Wno-attributes: already (D:\Votion3DGS\.venv\Lib\site-packages\gsplat\cuda\_backend.py)
+torch compiled_autograd nvcc guard: already (D:\Votion3DGS\.venv\Lib\site-packages\torch\include\torch\csrc\dynamo\compiled_autograd.h)
+venv-scripts=D:\Votion3DGS\.venv\Scripts
+CUDA_PATH=C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8
+vcvars64: set-vars=148; cl=C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.43.34808\bin\Hostx64\x64\cl.exe
+cuda math headers: v12.8 lacks cusparse.h; INCLUDE += C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.6\include
+msvc_flag_filter: installed
+gsplat installed: version=1.5.3 (P0 record; not the Train gate)
+gsplat 1-step dummy raster: OK on 2026-09-03 (P0). Superseded by '## litegs spike'.
+
+## litegs spike
+built=2026-09-07T08:10:46.498629+00:00 (env_report re-run, no build)
+litegs vendor: D:\Votion3DGS\vendor\litegs sha=004b95215c90c36cdaf4b354301132b700ac287b
+litegs raster 1-step: OK loss=0.6010 visible=4096/4096 cluster=128 sha=004b95215c90
