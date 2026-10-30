@@ -167,6 +167,56 @@
       ]
     },
     {
+      "id": "worldstereo_fp8",
+      "label": "WorldStereo FP8",
+      "repo": "apozz/WorldStereo-fp8",
+      "hf_filename": "WorldStereo-memory-dmd-fp8_e4m3fn_scaled.safetensors",
+      "filename": "WorldStereo-memory-dmd-fp8_e4m3fn_scaled.safetensors",
+      "local_relative_path": "diffusion_models/WorldStereo-memory-dmd-fp8_e4m3fn_scaled.safetensors",
+      "url": "https://huggingface.co/apozz/WorldStereo-fp8/resolve/main/WorldStereo-memory-dmd-fp8_e4m3fn_scaled.safetensors",
+      "public": true,
+      "expected_bytes": 20356086900,
+      "sets": ["worldstereo"]
+    },
+    {
+      "id": "dinov2",
+      "label": "DINOv2 base",
+      "repo": "facebook/dinov2-base",
+      "hf_filename": "model.safetensors",
+      "filename": "model.safetensors",
+      "local_relative_path": "dinov2-base/model.safetensors",
+      "url": "https://huggingface.co/facebook/dinov2-base/resolve/main/model.safetensors",
+      "public": true,
+      "expected_bytes": 346345912,
+      "sets": ["worldstereo"]
+    },
+    {
+      "id": "worldstereo_config",
+      "label": "WorldStereo config",
+      "repo": "hanshanxue/WorldStereo",
+      "hf_filename": "worldstereo-memory-dmd/config.json",
+      "filename": "config.json",
+      "under": "repo",
+      "local_relative_path": ".hf_cache/hub/models--hanshanxue--WorldStereo/snapshots/ac2ad97ecb043fe80c2f19cd1898006becb9d66e/worldstereo-memory-dmd/config.json",
+      "url": "https://huggingface.co/hanshanxue/WorldStereo/resolve/main/worldstereo-memory-dmd/config.json",
+      "public": true,
+      "expected_bytes": 3452,
+      "sets": ["worldstereo"]
+    },
+    {
+      "id": "wan480_config",
+      "label": "WAN 480P config",
+      "repo": "Wan-AI/Wan2.1-I2V-14B-480P-Diffusers",
+      "hf_filename": "transformer/config.json",
+      "filename": "config.json",
+      "under": "repo",
+      "local_relative_path": ".hf_cache/hub/models--Wan-AI--Wan2.1-I2V-14B-480P-Diffusers/snapshots/b184e23a8a16b20f108f727c902e769e873ffc73/transformer/config.json",
+      "url": "https://huggingface.co/Wan-AI/Wan2.1-I2V-14B-480P-Diffusers/resolve/main/transformer/config.json",
+      "public": true,
+      "expected_bytes": 466,
+      "sets": ["worldstereo"]
+    },
+    {
       "id": "moge",
       "label": "MoGe vitl",
       "repo": "Ruicheng/moge-vitl",

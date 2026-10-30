@@ -228,10 +228,14 @@ class SplatTrainer:
         self.holdout = bool(holdout)
         self.headless = bool(headless)
         self.color_space = D.color_space_from_key(color_space)
-        self.ckpt_path = self.scene_dir / D.CKPT_REL
-        self.meta_path = self.scene_dir / D.META_REL
-        self.ply_path = self.scene_dir / D.PLY_REL
-        self.png_path = self.scene_dir / D.PREVIEW_REL
+        from engine.sfm.dataset_source import colmap_root, output_root
+
+        self.colmap_dir = colmap_root(self.scene_dir)
+        self.output_dir = output_root(self.scene_dir)
+        self.ckpt_path = self.output_dir / D.CKPT_REL
+        self.meta_path = self.output_dir / D.META_REL
+        self.ply_path = self.output_dir / D.PLY_REL
+        self.png_path = self.output_dir / D.PREVIEW_REL
         self.backend = None
         self.controller = None
         self.control: ControlReader | None = None
@@ -259,6 +263,7 @@ class SplatTrainer:
             sh_degree=D.SH_DEGREE,
             resolution_scale=self.resolution_scale,
             holdout=self.holdout,
+            colmap_dir=self.colmap_dir,
             log=log,
         )
         return backend
@@ -337,7 +342,7 @@ class SplatTrainer:
         emit("ckpt", step)
 
     def _export(self, compact: bool = False, drop_sh_rest: bool = False) -> Path:
-        path = self.scene_dir / (D.PLY_COMPACT_REL if compact else D.PLY_REL)
+        path = self.output_dir / (D.PLY_COMPACT_REL if compact else D.PLY_REL)
         drop_sh_rest = drop_sh_rest or self.color_space == D.COLOR_SPACE_LUMA
         out, n = self.backend.export_ply(
             path,
@@ -354,10 +359,11 @@ class SplatTrainer:
 
     # ------------------------------------------------------------------ modes
     def run(self) -> int:
-        colmap = self.scene_dir / "colmap"
+        colmap = self.colmap_dir
         if not (colmap / "sparse" / "0" / "cameras.bin").is_file():
-            status("missing colmap/sparse/0 — Reconstruct first")
+            status(f"missing {colmap / 'sparse' / '0'} — Reconstruct first")
             return 2
+        status(f"dataset {colmap}")
         if self.mode in ("export", "export_compact", "export_compact_dc"):
             return self.run_export()
         if self.mode == "view":
@@ -450,7 +456,7 @@ class SplatTrainer:
     def _shutdown_viewport(self) -> None:
         if self.viewport is not None:
             try:
-                write_view_json(self.scene_dir / D.VIEW_REL, self.viewport.state)
+                write_view_json(self.output_dir / D.VIEW_REL, self.viewport.state)
             except Exception:
                 pass
         if self.shared is not None:

@@ -36,6 +36,7 @@ from PySide6.QtWidgets import (
 
 from app.widgets.splat_view import SplatLiveView
 from engine.pano.scene_io import scene_dir
+from engine.sfm.dataset_source import colmap_root, known_selected, output_root
 from engine.splat import defaults as D
 from engine.splat.status import litegs_spike_detail, litegs_spike_ok
 
@@ -190,10 +191,10 @@ class SplatPage(QWidget):
         return D.strategy_from_key(self.strategy_key())
 
     def _view_json(self) -> Path:
-        return scene_dir(self._scene_name()) / D.VIEW_REL
+        return output_root(scene_dir(self._scene_name())) / D.VIEW_REL
 
     def _preview_png(self) -> Path:
-        return scene_dir(self._scene_name()) / D.PREVIEW_REL
+        return output_root(scene_dir(self._scene_name())) / D.PREVIEW_REL
 
     # ------------------------------------------------------------------ rail
     def _build_rail(self) -> QWidget:
@@ -475,7 +476,7 @@ class SplatPage(QWidget):
         )
 
     def _open_colmap(self) -> None:
-        folder = scene_dir(self._scene_name()) / "colmap"
+        folder = colmap_root(scene_dir(self._scene_name()))
         if folder.is_dir():
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
 
@@ -675,10 +676,10 @@ class SplatPage(QWidget):
 
     # ------------------------------------------------------------- refresh
     def _colmap_ok(self, root: Path) -> bool:
-        return (root / "colmap" / "sparse" / "0" / "cameras.bin").is_file()
+        return (colmap_root(root) / "sparse" / "0" / "cameras.bin").is_file()
 
     def _meta(self, root: Path) -> dict:
-        path = root / "checkpoints" / "splat_meta.json"
+        path = output_root(root) / "checkpoints" / "splat_meta.json"
         if not path.is_file():
             return {}
         try:
@@ -695,6 +696,8 @@ class SplatPage(QWidget):
 
     def refresh(self) -> None:
         root = scene_dir(self._scene_name())
+        known = known_selected(root)
+        train_root = output_root(root)
         colmap_ok = self._colmap_ok(root)
         spike_ok = litegs_spike_ok()
         self.btn_colmap.setEnabled(colmap_ok)
@@ -702,7 +705,7 @@ class SplatPage(QWidget):
         legacy = bool(meta) and meta.get("format") != "votion-litegs-1"
         ck_strat = str(meta.get("controller") or meta.get("strategy") or "")
         same = bool(ck_strat) and ck_strat == self.strategy_label() and not legacy
-        ply = (root / "splat.ply").is_file()
+        ply = (train_root / "splat.ply").is_file()
         can_train = colmap_ok and spike_ok
         busy = self._worker_kind == "train"
         self.btn_train.setEnabled(can_train and not busy)
@@ -714,7 +717,12 @@ class SplatPage(QWidget):
         self.drop_sh.setEnabled(colmap_ok and same and not busy)
         steps = self._steps()
         if not colmap_ok:
-            self.gate_hint.setText("Reconstruct first — Train needs colmap/sparse/0.")
+            if known:
+                self.gate_hint.setText(
+                    "Known poses is selected. Reconstruct writes worldstereo/dataset first."
+                )
+            else:
+                self.gate_hint.setText("Reconstruct first — Train needs colmap/sparse/0.")
         elif not spike_ok:
             self.gate_hint.setText(
                 "LiteGS spike not OK — Train disabled. Home → Build LiteGS. "
@@ -731,7 +739,8 @@ class SplatPage(QWidget):
                 + ". Raise Max steps and Continue, or Retrain."
             )
         else:
-            self.gate_hint.setText(f"{self.strategy_label()} · max {steps} · budget {self._budget():,}.")
+            note = " Writes worldstereo/train. WAN splat.ply stays." if known else ""
+            self.gate_hint.setText(f"{self.strategy_label()} · max {steps} · budget {self._budget():,}.{note}")
         if meta.get("step") and not busy:
             self._stats["step"] = str(int(meta["step"]))
             self._stats["max"] = str(int(meta.get("max_steps") or steps))

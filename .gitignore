@@ -35,3 +35,5 @@ vendor/ostris-edit/**
 vendor/litegs/**
 !vendor/litegs/.gitkeep
 vendor/litegs_build/**
+vendor/worldstereo/**
+!vendor/worldstereo/.gitkeep

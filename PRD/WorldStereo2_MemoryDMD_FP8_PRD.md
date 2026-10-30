@@ -29,7 +29,7 @@ If this PRD and the certainty log disagree, the certainty log wins. **This PRD d
 | **G2 Weights licence** | Code is Apache-2.0. The official weight repo `hanshanxue/WorldStereo` carries **no** licence file (24-byte README). The FP8 repack says “WorldStereo overlay: MIT (inherited)” plus Apache-2.0 for the Wan base. HY-World 2.0’s own repo is the Tencent community licence (excludes EU, UK, Korea). Which one governs the weights is **UNKNOWN**. Ask the authors or accept the risk in writing. | Yik |
 | **G3 Experimental only** | Ships behind a Generate-page toggle, off by default, Quality profile only. WAN stays the default and stays installed. | Yik |
 
-Until G1 and G2 are written down, only §4.1 (environment spike on a scratch scene, outside the app) may run.
+**Signed 2026-10-29 by Yik:** G1, G2, and G3 are Index certainty-log entries #58, #59, and #60. The Generate-page choice exists only as an experimental Quality generator, off by default. WAN stays the default. The control itself is still WS-5: it stays disabled until the weights row is READY.
 
 **Correction to the earlier review:** `WAN_Replacement_Review_and_Alternatives.md` lists WorldStereo under the Tencent territory licence. That is the HY-World 2.0 repo’s licence. The standalone WorldStereo repo is Apache-2.0; see G2 for the weights.
 
@@ -287,7 +287,7 @@ tools\model_manifest.json           new entries, exact filenames, no invented si
 
 ### 4.11 Acceptance criteria
 
-- [ ] G1, G2, G3 recorded in the certainty log with dates.
+- [x] G1, G2, G3 recorded in the certainty log with dates (Index #58–#60, 2026-10-29).
 - [ ] `env_report.txt` records: PyTorch3D status (or fallback renderer accepted), FP8 DiT load OK, peak VRAM and wall time for one trajectory on the 3090.
 - [ ] FP8 DiT stays resident; text encoder is never on GPU at the same time.
 - [ ] Four rails of `alpine_02`, one view each, generated in one worker run with memory carried across rails; `retrieved.json` shows rails 2–4 retrieving frames from earlier rails.
@@ -321,7 +321,7 @@ tools\model_manifest.json           new entries, exact filenames, no invented si
 | Quality | FP8 card: “<1% perceptible on short clips, faint colour drift possible on long sequences” | Whether colour drift shows across 4 rails × 21 frames |
 | Reliability | Bank persisted after each trajectory; Stop leaves the last finished trajectory valid | — |
 | Security | Local only, no telemetry, no hub calls at run time | — |
-| Licence | Code Apache-2.0 with NOTICE | Weights (G2) |
+| Licence | Code Apache-2.0 with NOTICE | Weights still UNKNOWN. Risk accepted in writing 2026-10-29 (Index #59). Not a settled MIT grant |
 
 ---
 
@@ -356,7 +356,7 @@ No HTML dummy exists for this track. Do not edit the Phase 3 dummy for it. If th
 
 1. PyTorch3D on Windows / Python 3.12 / cu128.
 2. VRAM headroom with stitched retrieval at 480×832.
-3. Weights licence (G2).
+3. Weights licence still UNKNOWN. Yik accepted that risk on 2026-10-29 (Index #59). The FP8 card’s MIT sentence is not a settled licence.
 4. No released panoramic preprocessing; the adapter is Votion’s guess at the training distribution (render settings, FoV, start elevation).
 5. Output is ~0.4 MP pinhole; pinhole HiRes is new code and carries the sharpness.
 6. FP8 upcast per matmul on Ampere may make it slower than BF16 would be on a bigger card.
@@ -400,7 +400,7 @@ WS-3 before WS-4 on purpose: if consistency does not improve at 480p, pinhole Hi
 
 ## Open questions
 
-1. Weights licence for `hanshanxue/WorldStereo` (G2).
+1. ~~Weights licence for `hanshanxue/WorldStereo` (G2).~~ **Accepted as UNKNOWN, 2026-10-29 (Index #59).** Not resolved to MIT or to the Tencent community licence.
 2. Mask polarity and default FoV in `camera.json`: read at pin.
 3. Does WorldStereo’s pipeline accept Votion’s Comfy-format umT5 / CLIP-Vision / VAE, or does it need the 480P-Diffusers subfolders?
 4. Exact DINOv2 checkpoint the retrieval code loads.

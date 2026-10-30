@@ -76,6 +76,10 @@ def sfm_argv(scene: str) -> list[str]:
     return [python_executable(), "-m", "engine.workers.sfm", "--scene", scene]
 
 
+def known_pose_argv(scene: str) -> list[str]:
+    return [python_executable(), "-m", "engine.workers.known_pose", "--scene", scene]
+
+
 def splat_argv(
     scene: str,
     strategy: str,
@@ -123,6 +127,38 @@ def wan_argv(scene: str, rail: int, request: str | None = None) -> list[str]:
     ]
     if request:
         args.extend(["--request", str(request)])
+    return args
+
+
+def worldstereo_argv(
+    scene: str,
+    start_rail: int = 0,
+    prepare_only: bool = False,
+    only: bool = False,
+    request: str | None = None,
+    rails: list[int] | None = None,
+    seed: int | None = None,
+) -> list[str]:
+    """One process for the whole scene. The memory bank lives across rails."""
+    args = [
+        python_executable(),
+        "-m",
+        "engine.workers.worldstereo",
+        "--scene",
+        scene,
+        "--start-rail",
+        str(int(start_rail)),
+    ]
+    if prepare_only:
+        args.append("--prepare-only")
+    if only:
+        args.append("--only")
+    if request:
+        args.extend(["--request", str(request)])
+    if rails:
+        args.extend(["--rails", ",".join(str(int(i)) for i in rails)])
+    if seed is not None:
+        args.extend(["--seed", str(int(seed))])
     return args
 
 

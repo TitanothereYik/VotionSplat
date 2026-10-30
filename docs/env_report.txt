@@ -79,3 +79,53 @@ gsplat 1-step dummy raster: OK on 2026-09-03 (P0). Superseded by '## litegs spik
 built=2026-09-07T08:10:46.498629+00:00 (env_report re-run, no build)
 litegs vendor: D:\Votion3DGS\vendor\litegs sha=004b95215c90c36cdaf4b354301132b700ac287b
 litegs raster 1-step: OK loss=0.6010 visible=4096/4096 cluster=128 sha=004b95215c90
+
+## worldstereo dependencies
+written=2026-10-28T08:30:00Z
+pytorch3d 0.7.8 import OK (PointsRasterizer, Pointclouds). Source commit 75ebeeaea0908c5527e7b1e305fbc7681382db47.
+Windows build: DISTUTILS_USE_SDK=1, MSVC 14.43, CUDA 12.8 nvcc, sibling 12.6 math headers. CUB_HOME was unset; the build warned and continued on the toolkit CUB.
+First build failed in pulsar: CUDA 12.8 cuda/std/__tuple_dir/vector_types.h expected '>'. Cause is #define ushort / #define uint in pytorch3d/csrc/pulsar/global.h. Replaced with using-aliases (same change as pytorch3d commit 366eff2). Wheel then installed into the venv.
+Trajectory, FP8 load, and peak VRAM are not in this section. The scaled FP8 file was still downloading.
+
+## worldstereo spike
+failed=AttributeError: Found an existing imageio backend in your environment. Attempting to export video with imageio. 
+Unable to find a compatible ffmpeg installation in your environment to use with imageio. Please install via `pip install imageio-ffmpeg
+
+## worldstereo spike
+failed=NotImplementedError: Cannot copy out of meta tensor; no data! Please use torch.nn.Module.to_empty() instead of torch.nn.Module.to() when moving module from meta to a different device.
+
+## worldstereo spike
+failed=ValueError: Cannot forward both `image`: <PIL.Image.Image image mode=RGB size=832x480 at 0x170BA740DD0> and `image_embeds`: tensor([[[-4.3852e-01,  5.1968e-01, -6.5369e-01,  ..., -3.5469e-01,
+          -7.4483e-01, -1.7046e-01],
+         [ 6.8309e-02, -2.3618e-01,  3.7221e-03,  ...,  3.6233e-01,
+           1.3924e-01, -4.0432e-01],
+         [ 1.4050e-01,  2.7877e-01,  1.9471e-01,  ...,  9.3885e-02,
+           1.2071e-01, -9.2401e-02],
+         ...,
+         [ 7.8367e-01, -8.3715e-01,  2.1296e-01,  ...,  1.4792e-01,
+           3.0214e-01,  6.9629e-01],
+         [ 1.5804e-01,  1.3949e-01,  1.5727e-01,  ..., -6.6829e-04,
+           3.5905e-01, -1.1569e-01],
+         [ 9.6173e-02, -7.5699e-02,  1.0300e-01,  ...,  3.5712e-01,
+           5.4929e-03, -1.9488e-01]]]). Please make sure to only forward one of the two.
+
+## worldstereo spike
+failed=RuntimeError: Expected all tensors to be on the same device, but got mat1 is on cpu, different from other tensors on cuda:0 (when checking argument in method wrapper_CUDA_addmm)
+
+## worldstereo spike
+written=2026-10-28T13:11:49.717946+00:00
+code_sha=5ba8dc3d37c48ecef99bbd603815ced513a4a431
+pytorch3d: import OK 0.7.8; source 75ebeeaea0908c5527e7b1e305fbc7681382db47; pulsar global.h uint/ushort macros replaced with using-aliases so CUDA 12.8 cuda/std headers compile
+process_group: gloo world_size=1; ParallelDims.build_mesh no-op (no NCCL, no device mesh)
+cuda_alloc=expandable_segments:True
+dinov2: D:\Votion3DGS\models\dinov2-base local_files_only
+fp8_file: D:\Votion3DGS\models\diffusion_models\WorldStereo-memory-dmd-fp8_e4m3fn_scaled.safetensors
+fp8_linear=549 bf16_linear=123 other=455 unused=0
+dit_dtype=torch.bfloat16 dit_allocated_gb=19.24
+text_encoder_with_dit: cpu
+clip: comfy keys remapped by stripping vision_model.; image and image_embeds both passed (check_inputs mutual exclusion skipped)
+mask: white is empty (zbuf == -1). FoV 120x90 at 480x832. pano bank views=27
+result: {"frames": 21, "height": 480, "width": 832, "seconds": 6507.117103800178, "peak_gb": 30.853509426116943, "retrieved": 2}
+attention: Flash Attention not installed; the forward used PyTorch SDPA.
+nvidia-smi during a denoising step: 24261 MiB used, 66 MiB free, of 24576 MiB, GPU util 100%. torch max_memory_allocated 30.85 GB is above the 24 GB card, so the Windows driver paged the overflow into shared memory. Weights stayed scaled FP8 (no BF16 dequant of the DiT). Resident weights before the step were 19.24 GB.
+output: outputs/_worldstereo_spike/view0/traj0/worldstereo-memory-dmd_result.mp4 (21 frames, 832x480, 16 fps). Denoising bar 1:46:06; the 6507 s figure includes VAE encode and decode.

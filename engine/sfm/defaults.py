@@ -27,11 +27,17 @@ INITIAL_PANO_HIRES = True
 REUSE_SOLVE = False
 
 HELP_RECONSTRUCT = """RECONSTRUCT
-Keep or ditch rails after WAN. Ditched rails are left out of SphereSfM.
+Keep or ditch rails after WAN. Ditched rails are left out of SphereSfM and out of
+the known-pose dataset.
 Re-gen WAN on a hallucinated rail (edit the prompt on Generate, or change the path
-on Geometry and Play, then Re-gen). Reconstruct uses kept WAN clips when present.
+on Geometry and Play, then Re-gen). SphereSfM uses kept WAN clips when present.
 Confirm rails on Geometry first.
-Training images are gnomonic 90° SIMPLE_PINHOLE cube faces (Votion remaps
-sphere_cubic_reprojecer output so plaza lines stay straight). Do not un-bend the
-sparse cloud to fix a bowed splat — Retrain after Reconstruct.
+Training images for SphereSfM are gnomonic 90° SIMPLE_PINHOLE cube faces (Votion
+remaps sphere_cubic_reprojecer output so plaza lines stay straight). Do not
+un-bend the sparse cloud to fix a bowed splat — Retrain after Reconstruct.
+
+Known poses (WorldStereo) writes worldstereo/dataset from the keyframes and the
+poses WorldStereo already used, plus six 90° gnomonic faces of the 8K pano.
+It does not run SphereSfM and does not change colmap/ or splat.ply. Train then
+writes worldstereo/train.
 """

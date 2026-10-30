@@ -41,6 +41,7 @@ from engine.job import (
     download_argv,
     dummy_argv,
     hires_argv,
+    known_pose_argv,
     litegs_build_argv,
     moge_argv,
     pano_argv,
@@ -48,6 +49,7 @@ from engine.job import (
     splat_argv,
     wan_argv,
     worker_env,
+    worldstereo_argv,
 )
 from engine.pano.defaults import HELP_PANORAMA
 from engine.pano.scene_io import scene_dir
@@ -86,8 +88,15 @@ def _read_manifest() -> dict:
 
 
 def _is_ready(root: Path, entry: dict) -> bool:
-    path = root / "models" / entry["local_relative_path"]
-    return path.is_file() and path.stat().st_size > 0
+    base = root if entry.get("under") == "repo" else root / "models"
+    path = base / entry["local_relative_path"]
+    if not path.is_file():
+        return False
+    size = path.stat().st_size
+    expected = entry.get("expected_bytes")
+    if expected is not None:
+        return size == int(expected)
+    return size > 0
 
 
 def gpu_names() -> list[str]:
@@ -422,6 +431,7 @@ class MainWindow(QMainWindow):
         model.item(1).setEnabled(False)
         model.item(2).setEnabled(False)
         r.addWidget(self.profile)
+        self.profile.currentIndexChanged.connect(self._on_profile)
 
         r.addWidget(self._lab("CUDA device"))
         self.cuda = QSpinBox()
@@ -580,6 +590,10 @@ class MainWindow(QMainWindow):
             return
         self._refresh_status()
 
+    def _on_profile(self, index: int) -> None:
+        if hasattr(self, "gen_page"):
+            self.gen_page.set_quality(int(index) == 0)
+
     def _on_cuda(self, value: int) -> None:
         self.idx_chip.setText(f"GPU {value}")
         self.gpu_chip.setText(self._gpu_label())
@@ -639,6 +653,15 @@ class MainWindow(QMainWindow):
                 rows.append((moge["id"], moge["label"], "READY", "READY"))
             else:
                 rows.append((moge["id"], moge["label"], "P2 subset", "NOTE"))
+        by_id = {e["id"]: e for e in self._manifest["files"]}
+        for key in ("worldstereo_fp8", "worldstereo_config", "dinov2", "wan480_config"):
+            entry = by_id.get(key)
+            if entry is None:
+                continue
+            if _is_ready(REPO_ROOT, entry):
+                rows.append((entry["id"], entry["label"], "READY", "READY"))
+            else:
+                rows.append((entry["id"], entry["label"], f"MISSING_{entry['id']}", "MISSING"))
         for info in self._manifest.get("info_rows", []):
             rows.append((info["id"], info["label"], info["note"], "NOTE"))
         return rows
@@ -686,7 +709,7 @@ class MainWindow(QMainWindow):
                 return
             msg = parts[5] if len(parts) > 5 else ""
             self.job_strip.set_progress(current, total, pct, msg)
-            if self._job_label in ("wan", "hires") and hasattr(self, "gen_page"):
+            if self._job_label in ("wan", "hires", "worldstereo") and hasattr(self, "gen_page"):
                 self.gen_page.set_job_progress(current, total, pct, msg)
             return
         file_id = parts[1]
@@ -815,6 +838,18 @@ class MainWindow(QMainWindow):
                 self.recon_page.refresh()
             self._append_log(raw)
             return
+        if raw.startswith("WS\t"):
+            parts = raw.split("\t")
+            if hasattr(self, "gen_page") and len(parts) >= 2:
+                kind = parts[1]
+                if kind == "retrieved" and len(parts) >= 4:
+                    self.gen_page.show_ws(int(parts[2]), "retrieved", int(parts[3]))
+                elif kind == "rail" and len(parts) >= 4:
+                    self.gen_page.show_ws(int(parts[2]), parts[3])
+                elif kind == "inputs":
+                    self.gen_page.refresh(keep_preview=True)
+            self._append_log(raw)
+            return
         if raw.startswith("STATUS //") and self._job_running():
             self.job_strip.set_caption(raw)
         self._append_log(raw)
@@ -901,6 +936,31 @@ class MainWindow(QMainWindow):
                 self.gen_page.on_generate_start(rails, kind="hires")
             self._start_next_hires()
             return
+        if args[0] == "__worldstereo__":
+            if self._job_running():
+                self._append_log("STATUS // busy — Stop the current job first")
+                return
+            scene = args[1] if len(args) > 1 else self.scene.text()
+            req = args[2] if len(args) > 2 else ""
+            rails = [int(part) for part in (args[3] if len(args) > 3 else "").split(",") if part.strip()]
+            only = (args[4] if len(args) > 4 else "0") == "1"
+            start_rail = int(args[5]) if len(args) > 5 and str(args[5]).strip() else 0
+            seed = int(args[6]) if len(args) > 6 and str(args[6]).strip() else None
+            self._append_log(f"STATUS // WorldStereo request for {scene} rails={rails}")
+            if hasattr(self, "gen_page"):
+                self.gen_page.on_generate_start(rails or [start_rail], kind="worldstereo")
+            self._start_job(
+                worldstereo_argv(
+                    scene,
+                    start_rail=start_rail,
+                    only=only,
+                    request=req or None,
+                    rails=rails or None,
+                    seed=seed,
+                ),
+                "worldstereo",
+            )
+            return
         if args[0] != "__generate__":
             return
         if self._job_running():
@@ -947,6 +1007,14 @@ class MainWindow(QMainWindow):
             self._sfm_sparse = ""
             self._sfm_preview = ""
             self._start_job(sfm_argv(scene), "sfm")
+            return
+        if args[0] == "__known_pose__":
+            scene = args[1] if len(args) > 1 else self.scene.text()
+            self._sfm_images = "0"
+            self._sfm_points = "0"
+            self._sfm_sparse = ""
+            self._sfm_preview = ""
+            self._start_job(known_pose_argv(scene), "known_pose")
 
     # 10-step telemetry (step / loss / psnr / its / vram / fps / gaussians) stays in the
     # HUD; the log drawer gets controller events, checkpoints, exports, errors, state.
@@ -1234,11 +1302,11 @@ class MainWindow(QMainWindow):
                 label == "hires" and bool(self._hires_queue)
             )
             self.gen_page.on_job_finished(label, code, more=more)
-        if hasattr(self, "recon_page") and label in ("wan", "hires"):
+        if hasattr(self, "recon_page") and label in ("wan", "hires", "worldstereo"):
             self.recon_page.refresh()
         if hasattr(self, "geo_page"):
             self.geo_page.on_job_finished(label, code)
-        if label == "sfm" and hasattr(self, "recon_page"):
+        if label in ("sfm", "known_pose") and hasattr(self, "recon_page"):
             self.recon_page.on_sfm_finished(code)
         if label == "litegs":
             self._refresh_litegs_hint()

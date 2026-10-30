@@ -64,7 +64,7 @@ Copied from [Index HTML copies](../docs/Votion_3DGS_2.0_Index.md#html-copies-dum
 
 ## What is not in 2.0
 
-Do not re-open: slice+SHARP, UniSHARP, HY-World 2.0, NVIDIA Lyra, Marble, WorldFM/HunyuanWorld, PanoLRM, SeedVR as the sharpness path, ComfyUI UI, WSL.
+Do not re-open: slice+SHARP, UniSHARP, the HY-World 2.0 stack (two models, four GPUs), NVIDIA Lyra, Marble, WorldFM/HunyuanWorld, PanoLRM, SeedVR as the sharpness path, ComfyUI UI, WSL. The one exception is the standalone WorldStereo memory-DMD model, one GPU, Index certainty log #58–#60 (2026-10-29). It is an experimental Quality generator, off by default.
 
 P5 stretch only (not a 2.0 blocker): SeedVR2 experiment, Matrix-3D opt recon, macOS. Matrix-3D 5B as Fast default is a **2.0** lock.
 

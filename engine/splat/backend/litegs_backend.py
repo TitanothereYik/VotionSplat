@@ -134,6 +134,7 @@ class LiteGSBackend:
         resolution_scale: float = 1.0,
         holdout: bool = False,
         cluster_size: int = CLUSTER_SIZE,
+        colmap_dir: Path | None = None,
         log: Callable[[str], None] = print,
     ) -> None:
         ensure_litegs()
@@ -156,6 +157,7 @@ class LiteGSBackend:
         self.log = log
 
         self.scene_dir = Path(scene_dir)
+        self.colmap_dir = Path(colmap_dir) if colmap_dir is not None else self.scene_dir / "colmap"
         self.device = device
         self.sh_degree = int(sh_degree)
         self.resolution_scale = float(resolution_scale)
@@ -207,7 +209,7 @@ class LiteGSBackend:
         )
 
         torch = self.torch
-        colmap = self.scene_dir / "colmap"
+        colmap = self.colmap_dir
         raw_views = load_colmap_views(colmap)
         xyz, rgb = load_points3d(colmap)
         self.cam_center = camera_centroid_from_views(raw_views)

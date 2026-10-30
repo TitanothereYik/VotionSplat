@@ -143,4 +143,13 @@ mask join is not a hard edge, then RGB-gains the WAN fill toward the surrounding
 The 720p WAN clip itself is already one generated frame — re-run Confirm WAN → HiRes
 after changing feather or tone; do not re-Generate WAN for that.
 WAN loader: Diffusers 0.40 (spike 2026-09-03). Matrix-3D script did not run on this PC.
+
+WorldStereo 2.0 is an experimental Quality generator, off by default. WAN stays
+the default and stays installed. The choice stays disabled until the FP8 weights
+and DINOv2 rows are READY. Fast and Scout do not offer it. One process generates
+every rail and carries the memory bank across them. White in the WorldStereo mask
+is empty. Confirm → HiRes on that generator does not start; WAN HiRes is unchanged.
+Switching back to WAN leaves WAN outputs where they are. Known-pose Reconstruct
+writes worldstereo/dataset from the keyframes and does not change the WAN COLMAP
+model. Pinhole HiRes is not in this build.
 """

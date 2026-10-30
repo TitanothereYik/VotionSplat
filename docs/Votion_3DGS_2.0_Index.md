@@ -88,6 +88,9 @@ These are the only product facts treated as **locked**. Everything else in the p
 55. **Retrain required (2026-09-07):** checkpoints written by the retired gsplat trainer (params only) are not loadable; Continue / Export on one shows “Retrain required”.
 56. **Step-based schedule (2026-09-07):** LiteGS drives densify / SH warm-up by epoch (tuned for ~200-image scenes); Votion scenes have hundreds of small views per epoch and any step count, so SH warms up one band per clamp(steps / 10, 200, 1000) and densify runs between 5 % and 80 % of the steps (opacity decay no more often than every 2000 steps): LiteGS TamingGS in ~24 cycles, MCMC Compact at the 3DGS cadence of one cycle per 100 steps (its Metropolis-Hastings chain and 5 % split target compound per cycle). Appends and prunes are chunk-exact (LiteGS stores Gaussians in fixed chunks; a sub-chunk append would be dropped, a non-multiple prune padded with duplicates). Training cameras list + **GT compare** (render | ground truth) on the Splat page judge convergence.
 57. **Gnomonic cube faces (2026-09-08):** SphereSfM still matches equirect frames as `SPHERE`, then `sphere_cubic_reprojecer` emits `SIMPLE_PINHOLE` 90° cameras. **Votion rewrites every cube-face PNG as a true gnomonic pinhole** of that ERP (`engine/sfm/cubic_reproject.py`, after every Reconstruct). Do **not** run vanilla COLMAP pinhole on raw ERP. Do **not** un-bend `points3D` to flatten a bowed splat — the GT images were the bowl. alpine_01 measured: binary face `frame_00000` front ~31 % line sag vs ~0.2 % on a gnomonic remap of the same `equirect_hires` frame. Retrain after Reconstruct; do not Continue a checkpoint fitted to the old faces. MoGe/HiRes floor-plane prior is a **later** step if rails still bowl after this remap.
+58. **WorldStereo reopen — gate G1 (2026-10-29, Yik):** The rejection of Hunyuan / HY-World 2.0 below (two huge models at once, four GPUs) stays for that stack. Yik reopens one piece only: the standalone WorldStereo memory-DMD model (`FuchengSu/WorldStereo`, Apache-2.0 code, pin in `vendor/worldstereo.sha`), one GPU (RTX 3090), as an experimental Quality generator in `PRD/WorldStereo2_MemoryDMD_FP8_PRD.md`. Do not vendor or import `Tencent-Hunyuan/HY-World-2.0`. Do not bring back WorldMirror, HY-Pano, WorldNav, or HY-World’s 3DGS trainer. WAN 2.1 stays the default and stays installed. The experimental toggle is gate G3, recorded as #60.
+59. **WorldStereo weights — gate G2 (2026-10-29, Yik):** The inference code is Apache-2.0 (`vendor/worldstereo/LICENSE.md`). The official weight repo `hanshanxue/WorldStereo` has no licence file. The FP8 repack `apozz/WorldStereo-fp8` says the overlay is MIT (inherited) and the Wan base is Apache-2.0. HY-World 2.0’s own repo is the Tencent Hunyuan Community License (excludes EU, UK, and Korea). Which of those governs the weights is still **UNKNOWN**. Yik accepts that risk in writing for this experiment. Do not treat the FP8 card’s MIT sentence as a settled licence. Two files inside the WorldStereo pin (`src/sp_utils/parallel_states.py`, `src/sp_utils/communications.py`) also carry a Tencent Hunyuan Community License header; they stay in the pinned tree and are noted in `vendor/worldstereo_NOTICE.md`.
+60. **WorldStereo experimental toggle — gate G3 (2026-10-29, Yik):** WorldStereo may ship on the Generate page as a generator choice, **off by default**, Quality profile only. WAN 2.1 + pano LoRA stays the default and stays installed. Switching back to WAN must leave every WAN output untouched. The control stays disabled, with a tooltip, until the weights row is READY. Fast and Scout do not offer it.
 
 ### Measured on this PC (not guessed)
 
@@ -155,13 +158,13 @@ These are the only product facts treated as **locked**. Everything else in the p
 | Slice a 360, run Apple SHARP per face, stitch | Ugly seams; SHARP does not invent off-axis detail; **non-commercial** license |
 | MoGe to line up those SHARP views | Progress, then same two killers: not flexible enough once you move + license |
 | UniSHARP | Fast 360, worlds fall apart quickly once you leave center |
-| Hunyuan / HY-World 2.0 | Two huge models in memory at once; designed for **four GPUs** |
+| Hunyuan / HY-World 2.0 | Two huge models in memory at once; designed for **four GPUs**. **Exception (2026-10-29, #58):** the standalone WorldStereo memory-DMD model, one GPU only |
 | NVIDIA Lyra | 91 GB, Linux-only, ~6 min first start |
 | World Labs Marble | Closed source; small roam; **no working reflections** |
 
 **Selected:** Skywork Matrix-3D = MoGe mesh as camera condition + **LoRA on Wan 2.1** (not a new video model). LoRA trained by flying a virtual 360° drone in **UE5** through **500** game worlds. Votion ports that idea natively (SplatKit `core/`), not ComfyUI.
 
-**V1 is not upgraded.** HunyuanWorld / WorldFM / HY-World 2.0 stay archived.
+**V1 is not upgraded.** HunyuanWorld / WorldFM / the HY-World 2.0 stack stay archived. The only reopen is #58 (standalone WorldStereo, one GPU).
 
 ---
 
