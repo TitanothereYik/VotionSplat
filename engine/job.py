@@ -72,10 +72,6 @@ def camplot_argv(scene: str, rail: int = 0) -> list[str]:
     ]
 
 
-def sfm_argv(scene: str) -> list[str]:
-    return [python_executable(), "-m", "engine.workers.sfm", "--scene", scene]
-
-
 def known_pose_argv(scene: str) -> list[str]:
     return [python_executable(), "-m", "engine.workers.known_pose", "--scene", scene]
 
@@ -115,44 +111,33 @@ def splat_argv(
     return args
 
 
-def wan_argv(scene: str, rail: int, request: str | None = None) -> list[str]:
-    args = [
-        python_executable(),
-        "-m",
-        "engine.workers.wan",
-        "--scene",
-        scene,
-        "--rail",
-        str(int(rail)),
-    ]
-    if request:
-        args.extend(["--request", str(request)])
-    return args
-
-
 def worldstereo_argv(
     scene: str,
-    start_rail: int = 0,
+    *,
+    mode: str = "joint",
+    resume: bool = True,
+    regen_rail: int | None = None,
     prepare_only: bool = False,
-    only: bool = False,
     request: str | None = None,
     rails: list[int] | None = None,
     seed: int | None = None,
 ) -> list[str]:
-    """One process for the whole scene. The memory bank lives across rails."""
+    """One process for the whole scene. ``mode`` is joint or rail."""
     args = [
         python_executable(),
         "-m",
         "engine.workers.worldstereo",
         "--scene",
         scene,
-        "--start-rail",
-        str(int(start_rail)),
+        "--mode",
+        str(mode or "joint"),
     ]
+    if not resume:
+        args.append("--restart")
+    if regen_rail is not None:
+        args.extend(["--regen-rail", str(int(regen_rail))])
     if prepare_only:
         args.append("--prepare-only")
-    if only:
-        args.append("--only")
     if request:
         args.extend(["--request", str(request)])
     if rails:
@@ -162,19 +147,14 @@ def worldstereo_argv(
     return args
 
 
-def hires_argv(scene: str, rail: int, request: str | None = None) -> list[str]:
-    args = [
+def pinhole_hires_argv(scene: str) -> list[str]:
+    return [
         python_executable(),
         "-m",
-        "engine.workers.hires",
+        "engine.workers.pinhole_hires",
         "--scene",
         scene,
-        "--rail",
-        str(int(rail)),
     ]
-    if request:
-        args.extend(["--request", str(request)])
-    return args
 
 
 def litegs_build_argv(rebuild: bool = False) -> list[str]:

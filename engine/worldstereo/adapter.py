@@ -9,8 +9,7 @@ follows the loader, because that is what retrieval and sampling open.
 down the unreleased VLM path.
 
 One world frame for every rail: MoGe level-9 depth on the Plot Camera
-2048×1024 canvas, unprojected with the same ERP convention as
-``engine.sfm.cubic_reproject`` (image centre is +Z, +Y down). Rail cameras are
+2048×1024 canvas, unprojected with image centre +Z and +Y down. Rail cameras are
 the Plot Camera ``rails/rail_XX.json`` matrices, every 4th frame. Perspective
 cuts of the 8K pano use the pin's 27 origin cameras.
 """
@@ -18,7 +17,6 @@ cuts of the 8K pano use the pin's 27 origin cameras.
 from __future__ import annotations
 
 import json
-import shutil
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,10 +24,13 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from engine.geo.defaults import MAX_RAILS
 from engine.geo.rails import camplot_meta_rel, rail_json_rel
 from engine.job import REPO_ROOT
 from engine.pano.scene_io import pano_path, scene_dir
 from engine.worldstereo import defaults as D
+from engine.worldstereo.joint import JointChunk, JointStop, joint_plan
+from engine.worldstereo.views import rail_view_rel
 
 PIN_BANK = (
     REPO_ROOT
@@ -50,13 +51,26 @@ POINT_STRIDE = 1
 class TrajJob:
     rail_index: int
     direction: str
+    view: str
     view_id: str
     traj_id: str
-    folder: str
+    layout: str = "separate"
+    frames: int | None = None
+
+    @property
+    def folder(self) -> str:
+        return f"rail_{self.rail_index:02d}/{self.view}"
 
     @property
     def output_rel(self) -> str:
-        return f"worldstereo/rails/{self.folder}"
+        return rail_view_rel(self.rail_index, self.view)
+
+    @property
+    def sample_count(self) -> int:
+        """Frames the model sees. Per-rail runs use the 21-frame clip."""
+        if self.frames is not None:
+            return int(self.frames)
+        return D.NFRAME
 
 
 def input_root(scene: str) -> Path:
@@ -158,26 +172,60 @@ def _direction(root: Path, index: int) -> str:
     return "look_forward"
 
 
-def list_trajs(scene: str, limit: int = 4) -> list[TrajJob]:
+def select_poses(w2c_full: np.ndarray, job: TrajJob) -> tuple[np.ndarray, np.ndarray]:
+    """Front-view poses for one rail. The model sees the same poses that are kept."""
+    chosen = subsample_indices(w2c_full.shape[0])
+    mats = np.asarray(w2c_full, dtype=np.float64)[chosen]
+    return mats, mats
+
+
+def list_trajs(
+    scene: str,
+    order: list[int] | None = None,
+) -> list[TrajJob]:
+    """One front-view job per rail. Rails follow ``order``; missing rails are skipped."""
     root = scene_dir(scene)
+    if order is None:
+        indices = [index for index in range(MAX_RAILS) if (root / rail_json_rel(index)).is_file()]
+    else:
+        indices = []
+        for index in order:
+            index = int(index)
+            if index not in indices and (root / rail_json_rel(index)).is_file():
+                indices.append(index)
     jobs: list[TrajJob] = []
-    for index in range(limit):
-        path = root / rail_json_rel(index)
-        if not path.is_file():
-            break
-        direction = _direction(root, index)
+    for index in indices:
         jobs.append(
             TrajJob(
                 rail_index=index,
-                direction=direction,
-                view_id=f"view{index:02d}",
+                direction=_direction(root, index),
+                view="front",
+                view_id=f"view{index:02d}_front",
                 traj_id="traj0",
-                folder=f"{index:02d}_{direction}",
+                layout="separate",
             )
         )
     if not jobs:
-        raise FileNotFoundError(f"no rails/rail_00.json under {root}")
+        raise FileNotFoundError(f"no rails/rail_XX.json under {root}")
     return jobs
+
+
+def joint_counts(scene: str, order: list[int]) -> list[tuple[int, int]]:
+    """``(rail, pose count)`` for the rails that exist, in ``order``."""
+    root = scene_dir(scene)
+    counts: list[tuple[int, int]] = []
+    for index in order:
+        path = root / rail_json_rel(int(index))
+        if not path.is_file():
+            continue
+        counts.append((int(index), int(_load_rail(root, int(index)).shape[0])))
+    if not counts:
+        raise FileNotFoundError(f"no rails/rail_XX.json under {root}")
+    return counts
+
+
+def joint_chunks(scene: str, order: list[int], frames_per_rail: int | None = None) -> list[JointChunk]:
+    return joint_plan(joint_counts(scene, order), frames_per_rail)
 
 
 def _moge_cloud(pano_rgb: np.ndarray, device: str) -> tuple[np.ndarray, np.ndarray]:
@@ -259,8 +307,8 @@ def _write_bank(root: Path, erp: np.ndarray, bank: dict, K: np.ndarray) -> None:
     (root / "pano_bank" / "cameras.json").write_text(json.dumps(cameras), encoding="utf-8")
 
 
-def build_scene(scene: str, jobs: list[TrajJob], prompt: str, device: str = "cuda:0") -> Path:
-    """Write ``<scene>/worldstereo/input``. Deterministic for a fixed pano and rails."""
+def _prepare_input(scene: str, prompt: str, device: str):
+    """Pano, pin intrinsics, MoGe cloud, and the WorldStereo input root."""
     root = scene_dir(scene)
     pano_file = pano_path(scene)
     if not pano_file.is_file():
@@ -275,18 +323,12 @@ def build_scene(scene: str, jobs: list[TrajJob], prompt: str, device: str = "cud
     forbidden = out / "panorama.png"
     if forbidden.exists():
         forbidden.unlink()
-
     (out / "meta_info.json").write_text(
         json.dumps({"scene_type": "panorama"}, indent=2) + "\n", encoding="utf-8"
     )
-    caption = {
-        "short caption": prompt,
-        "medium caption": prompt,
-        "long caption": prompt,
-    }
+    caption = {"short caption": prompt, "medium caption": prompt, "long caption": prompt}
     (out / "prompt.json").write_text(json.dumps(caption, indent=2) + "\n", encoding="utf-8")
     _write_bank(out, erp, pin_bank_cameras(), K)
-
     points, colors = _moge_cloud(erp, device)
     norms = np.linalg.norm(points, axis=1)
     print(
@@ -294,29 +336,89 @@ def build_scene(scene: str, jobs: list[TrajJob], prompt: str, device: str = "cud
         f"radius_p95={float(np.quantile(norms, 0.95)):.3f}",
         flush=True,
     )
+    return root, erp, K, out, points, colors
+
+
+def _write_traj(
+    out: Path,
+    view_id: str,
+    erp: np.ndarray,
+    w2cs: np.ndarray,
+    K: np.ndarray,
+    points: np.ndarray,
+    colors: np.ndarray,
+    prompt: str,
+    device: str,
+) -> tuple[list[np.ndarray], list[np.ndarray]]:
+    view = out / view_id
+    traj = view / "traj0"
+    traj.mkdir(parents=True, exist_ok=True)
+    start = cut_pinhole(erp, w2cs[0], K, D.SIZE_W, D.SIZE_H)
+    cv2.imwrite(str(view / "start_frame.png"), cv2.cvtColor(start, cv2.COLOR_RGB2BGR))
+    rgb, empty = _render_traj(points, colors, w2cs, K, device)
+    color_bgr = [cv2.cvtColor(frame, cv2.COLOR_RGB2BGR) for frame in rgb]
+    mask_bgr = [cv2.cvtColor(np.where(frame, 255, 0).astype(np.uint8), cv2.COLOR_GRAY2BGR) for frame in empty]
+    _write_mp4(color_bgr, traj / "render.mp4")
+    _write_mp4(mask_bgr, traj / "render_mask.mp4")
+    camera = {"extrinsic": w2cs.tolist(), "intrinsic": [K.tolist() for _ in range(w2cs.shape[0])]}
+    (traj / "camera.json").write_text(json.dumps(camera), encoding="utf-8")
+    (traj / "traj_caption.json").write_text(json.dumps({"prompt": prompt}, indent=2) + "\n", encoding="utf-8")
+    return color_bgr, mask_bgr
+
+
+def build_scene(scene: str, jobs: list[TrajJob], prompt: str, device: str = "cuda:0") -> Path:
+    """Write ``<scene>/worldstereo/input`` for one front view per rail."""
+    root, erp, K, out, points, colors = _prepare_input(scene, prompt, device)
     for job in jobs:
         w2c_full = _load_rail(root, job.rail_index)
-        chosen = subsample_indices(w2c_full.shape[0])
-        w2cs = w2c_full[chosen]
-        view = out / job.view_id
-        traj = view / job.traj_id
-        traj.mkdir(parents=True, exist_ok=True)
-        start = cut_pinhole(erp, w2cs[0], K, D.SIZE_W, D.SIZE_H)
-        cv2.imwrite(str(view / "start_frame.png"), cv2.cvtColor(start, cv2.COLOR_RGB2BGR))
-        rgb, empty = _render_traj(points, colors, w2cs, K, device)
-        color_bgr = [cv2.cvtColor(frame, cv2.COLOR_RGB2BGR) for frame in rgb]
-        mask_bgr = [cv2.cvtColor(np.where(frame, 255, 0).astype(np.uint8), cv2.COLOR_GRAY2BGR) for frame in empty]
-        _write_mp4(color_bgr, traj / "render.mp4")
-        _write_mp4(mask_bgr, traj / "render_mask.mp4")
-        camera = {"extrinsic": w2cs.tolist(), "intrinsic": [K.tolist() for _ in range(w2cs.shape[0])]}
-        (traj / "camera.json").write_text(json.dumps(camera), encoding="utf-8")
-        (traj / "traj_caption.json").write_text(
-            json.dumps({"prompt": prompt}, indent=2) + "\n", encoding="utf-8"
-        )
+        w2cs, kept = select_poses(w2c_full, job)
+        colors_bgr, masks_bgr = _write_traj(out, job.view_id, erp, w2cs, K, points, colors, prompt, device)
         rail_out = root / job.output_rel
         (rail_out / "render").mkdir(parents=True, exist_ok=True)
         (rail_out / "mask").mkdir(parents=True, exist_ok=True)
-        shutil.copy2(traj / "render.mp4", rail_out / "render" / "render.mp4")
-        shutil.copy2(traj / "render_mask.mp4", rail_out / "mask" / "render_mask.mp4")
+        _write_mp4(colors_bgr, rail_out / "render" / "render.mp4")
+        _write_mp4(masks_bgr, rail_out / "mask" / "render_mask.mp4")
+        camera = {
+            "extrinsic": kept.tolist(),
+            "intrinsic": [K.tolist() for _ in range(kept.shape[0])],
+        }
         (rail_out / "camera.json").write_text(json.dumps(camera), encoding="utf-8")
     return out
+
+
+def _chunk_model_stops(chunks: list[JointChunk], chunk: JointChunk) -> tuple[list[JointStop], int]:
+    """Stops the model sees. A later chunk prepends the previous chunk's last frame."""
+    if chunk.index == 0:
+        return list(chunk.frames), 0
+    previous = chunks[chunk.index - 1].frames[-1]
+    return [previous, *chunk.frames], 1
+
+
+def build_joint_scene(
+    scene: str,
+    order: list[int],
+    prompt: str,
+    frames_per_rail: int | None = None,
+    device: str = "cuda:0",
+) -> Path:
+    """One input trajectory per joint chunk. The first frame of chunk 0 is the star."""
+    root, erp, K, out, points, colors = _prepare_input(scene, prompt, device)
+    chunks = joint_chunks(scene, order, frames_per_rail)
+    rails = {index: _load_rail(root, index) for index, _count in joint_counts(scene, order)}
+    manifest = []
+    for chunk in chunks:
+        stops, anchor = _chunk_model_stops(chunks, chunk)
+        w2cs = np.stack([rails[stop.rail][stop.pose] for stop in stops], axis=0)
+        view_id = f"joint_c{chunk.index:02d}"
+        _write_traj(out, view_id, erp, w2cs, K, points, colors, prompt, device)
+        manifest.append(
+            {
+                "index": chunk.index,
+                "view_id": view_id,
+                "anchor": anchor,
+                "frames": [{"rail": stop.rail, "pose": stop.pose} for stop in chunk.frames],
+            }
+        )
+    (out / "joint_plan.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    return out
+

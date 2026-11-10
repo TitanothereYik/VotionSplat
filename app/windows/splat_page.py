@@ -36,7 +36,7 @@ from PySide6.QtWidgets import (
 
 from app.widgets.splat_view import SplatLiveView
 from engine.pano.scene_io import scene_dir
-from engine.sfm.dataset_source import colmap_root, known_selected, output_root
+from engine.sfm.dataset_source import colmap_root, output_root
 from engine.splat import defaults as D
 from engine.splat.status import litegs_spike_detail, litegs_spike_ok
 
@@ -696,7 +696,6 @@ class SplatPage(QWidget):
 
     def refresh(self) -> None:
         root = scene_dir(self._scene_name())
-        known = known_selected(root)
         train_root = output_root(root)
         colmap_ok = self._colmap_ok(root)
         spike_ok = litegs_spike_ok()
@@ -717,12 +716,7 @@ class SplatPage(QWidget):
         self.drop_sh.setEnabled(colmap_ok and same and not busy)
         steps = self._steps()
         if not colmap_ok:
-            if known:
-                self.gate_hint.setText(
-                    "Known poses is selected. Reconstruct writes worldstereo/dataset first."
-                )
-            else:
-                self.gate_hint.setText("Reconstruct first — Train needs colmap/sparse/0.")
+            self.gate_hint.setText("Reconstruct first — Train needs worldstereo/dataset.")
         elif not spike_ok:
             self.gate_hint.setText(
                 "LiteGS spike not OK — Train disabled. Home → Build LiteGS. "

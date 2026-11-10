@@ -11,9 +11,10 @@ deviations are dropped and the fit is repeated. That is the §7.1.2 alignment
 from the HY-World 2.0 paper, in Votion's own code, with MoGe instead of
 WorldMirror.
 
-When ``hires/000.png`` exists for a rail and matches the keyframe count, those
-frames are the images and the §4.2 intrinsics are scaled to that size. This
-build's rails are the 480p keyframes.
+When ``hires/`` is an upscale of the WorldStereo keyframes and the count
+matches, those frames are the images and the §4.2 intrinsics are scaled to
+that size. A pinhole reprojection of the panorama is not used. This build's
+rails are the 480p keyframes.
 """
 
 from __future__ import annotations
@@ -27,11 +28,13 @@ import cv2
 import numpy as np
 
 from engine.geo.rails import kept_rail_indices
+from engine.hires.pinhole import hires_complete
 from engine.job import REPO_ROOT, job_progress
 from engine.pano.scene_io import pano_path, scene_dir
-from engine.sfm.dataset_source import keyframe_paths, rail_folder, write_source
+from engine.sfm.dataset_source import keyframe_paths, view_folders, write_source
 from engine.worldstereo import defaults as D
 from engine.worldstereo.adapter import _moge_cloud, cut_pinhole
+from engine.worldstereo.views import VIEWS
 
 SPLATKIT = REPO_ROOT / "vendor" / "splatkit"
 if str(SPLATKIT) not in sys.path:
@@ -42,7 +45,7 @@ from tools.colmap_write_model import write_cameras_binary, write_images_binary  
 
 # One sample per 8 pixels of an aligned depth map. A 480×832 frame then adds
 # at most a few thousand points instead of a dense depth image.
-KEYFRAME_STRIDE = 8
+KEYFRAME_STRIDE = 16
 MIN_INLIERS = 500
 
 # OpenCV cube at the origin. Columns of R_c2w are camera +X, +Y, +Z in the
@@ -162,6 +165,16 @@ def align_depth(z_render: np.ndarray, z_pred: np.ndarray) -> tuple[float, float,
     return scale, shift, inlier.reshape(z_render.shape), rel
 
 
+def frame_name(index: int, view: str, frame_i: int) -> str:
+    return f"rail_{int(index):02d}_{view}_f{int(frame_i):03d}.png"
+
+
+def frame_stride(height: int, width: int) -> int:
+    """Scale the 480p stride so a 2× HiRes frame does not blow the point budget."""
+    scale = max(int(height) / float(D.SIZE_H), int(width) / float(D.SIZE_W), 1.0)
+    return max(1, int(round(KEYFRAME_STRIDE * scale)))
+
+
 def _scaled_k(K: np.ndarray, width: int, height: int) -> np.ndarray:
     out = np.array(K, dtype=np.float64, copy=True)
     out[0, 0] *= width / float(D.SIZE_W)
@@ -184,8 +197,8 @@ def _camera_key(K: np.ndarray, width: int, height: int) -> tuple:
 
 def _frame_choice(rail: Path) -> tuple[list[Path], str]:
     keyframes = keyframe_paths(rail)
-    hires = sorted((rail / "hires").glob("[0-9][0-9][0-9].png"))
-    if keyframes and hires and len(hires) == len(keyframes):
+    if keyframes and hires_complete(rail, len(keyframes)):
+        hires = sorted((rail / "hires").glob("[0-9][0-9][0-9].png"))
         return hires, "hires"
     return keyframes, "keyframes"
 
@@ -235,20 +248,24 @@ def build(scene: str, device: str = "cuda:0") -> dict:
     erp = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
 
     kept = kept_rail_indices(scene)
-    rails: list[tuple[int, Path, list[Path], str]] = []
+    rails: list[tuple[int, str, Path, list[Path], str]] = []
     for index in kept:
-        folder = rail_folder(root, index)
-        if folder is None:
+        folders = view_folders(root, index)
+        if not folders:
             print(f"STATUS // rail {index} has no worldstereo folder — skipped", flush=True)
             continue
-        frames, kind = _frame_choice(folder)
-        if not frames:
-            print(f"STATUS // rail {index} has no keyframes — skipped", flush=True)
-            continue
-        cam_path = folder / "camera.json"
-        if not cam_path.is_file():
-            raise FileNotFoundError(f"missing {cam_path}")
-        rails.append((index, folder, frames, kind))
+        for view in VIEWS:
+            folder = folders.get(view)
+            if folder is None:
+                continue
+            frames, kind = _frame_choice(folder)
+            if not frames:
+                print(f"STATUS // rail {index} {view} has no keyframes — skipped", flush=True)
+                continue
+            cam_path = folder / "camera.json"
+            if not cam_path.is_file():
+                raise FileNotFoundError(f"missing {cam_path}")
+            rails.append((index, view, folder, frames, kind))
     if not rails:
         raise RuntimeError(f"no kept WorldStereo keyframes under {root / 'worldstereo' / 'rails'}")
 
@@ -297,25 +314,27 @@ def build(scene: str, device: str = "cuda:0") -> dict:
     moge = get_moge_model(ckpt=str(REPO_ROOT / "models" / "MoGe" / "model.pt"), device=device)
     moge.to(device)
     step = 1
-    for index, folder, frames, kind in rails:
+    for index, view, folder, frames, kind in rails:
         payload = json.loads((folder / "camera.json").read_text(encoding="utf-8"))
         w2cs = np.asarray(payload["extrinsic"], dtype=np.float64)
         ks = np.asarray(payload["intrinsic"], dtype=np.float64)
         if w2cs.shape[0] != len(frames):
             raise RuntimeError(
-                f"{folder.name} has {len(frames)} {kind} frames and {w2cs.shape[0]} poses"
+                f"rail {index} {view} has {len(frames)} frames and {w2cs.shape[0]} poses"
             )
         rels: list[float] = []
         added = 0
-        for frame_i, src in enumerate(frames):
+        for enum_i, src in enumerate(frames):
+            frame_i = int(src.stem)
+            pose_i = enum_i
             bgr_frame = cv2.imread(str(src), cv2.IMREAD_COLOR)
             if bgr_frame is None:
                 raise RuntimeError(f"failed to read {src}")
             rgb = cv2.cvtColor(bgr_frame, cv2.COLOR_BGR2RGB)
             height, width = rgb.shape[:2]
-            K = _scaled_k(ks[frame_i], width, height)
-            w2c = w2cs[frame_i]
-            name = f"rail_{index:02d}_f{frame_i:03d}.png"
+            K = _scaled_k(ks[pose_i], width, height)
+            w2c = w2cs[pose_i]
+            name = frame_name(index, view, frame_i)
             cv2.imwrite(str(image_dir / name), bgr_frame)
             qvec = rotmat2qvec(w2c[:3, :3])
             if not np.allclose(qvec2rotmat(qvec), w2c[:3, :3], atol=1e-6):
@@ -341,8 +360,9 @@ def build(scene: str, device: str = "cuda:0") -> dict:
                 print(f"STATUS // rail {index} frame {frame_i:03d} alignment skipped", flush=True)
             else:
                 scale, shift, inlier, rel = fitted
+                stride = frame_stride(height, width)
                 grid = np.zeros(inlier.shape, dtype=bool)
-                grid[::KEYFRAME_STRIDE, ::KEYFRAME_STRIDE] = True
+                grid[::stride, ::stride] = True
                 ys, xs = np.nonzero(inlier & grid)
                 z = scale * z_pred[ys, xs].astype(np.float64) + shift
                 cam = np.stack(
@@ -354,17 +374,19 @@ def build(scene: str, device: str = "cuda:0") -> dict:
                 extra_rgb.append(rgb[ys, xs])
                 rels.append(rel)
                 added += int(world.shape[0])
-            job_progress(step, len(rails) + 2, f"known-pose rail {index} frame {frame_i + 1}/{len(frames)}")
+            job_progress(step, len(rails) + 2, f"known-pose rail {index} {view} frame {frame_i + 1}/{len(frames)}")
         step += 1
-        per_rail[str(index)] = {
+        per_rail[f"{index:02d}_{view}"] = {
+            "rail": index,
+            "view": view,
             "frames": len(frames),
             "source": kind,
             "aligned_points": added,
             "median_rel_residual": None if not rels else float(np.median(rels)),
         }
         print(
-            f"STATUS // rail {index} {kind} frames={len(frames)} aligned_points={added} "
-            f"median_rel={per_rail[str(index)]['median_rel_residual']}",
+            f"STATUS // rail {index} {view} {kind} frames={len(frames)} aligned_points={added} "
+            f"median_rel={per_rail[f'{index:02d}_{view}']['median_rel_residual']}",
             flush=True,
         )
 

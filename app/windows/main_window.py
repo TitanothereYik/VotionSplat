@@ -7,7 +7,7 @@ import subprocess
 from pathlib import Path
 
 from PySide6.QtCore import QProcess, QProcessEnvironment, Qt, QTimer, Signal
-from PySide6.QtGui import QCloseEvent, QFont
+from PySide6.QtGui import QCloseEvent, QColor, QFont, QTextBlockFormat, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import (
     QButtonGroup,
     QComboBox,
@@ -40,14 +40,12 @@ from engine.job import (
     caption_argv,
     download_argv,
     dummy_argv,
-    hires_argv,
     known_pose_argv,
     litegs_build_argv,
     moge_argv,
     pano_argv,
-    sfm_argv,
+    pinhole_hires_argv,
     splat_argv,
-    wan_argv,
     worker_env,
     worldstereo_argv,
 )
@@ -56,7 +54,7 @@ from engine.pano.scene_io import scene_dir
 from engine.splat.status import litegs_spike_ok
 from engine.sfm.defaults import HELP_RECONSTRUCT
 from engine.splat.defaults import HELP_SPLAT
-from engine.video.defaults import HELP_GENERATE
+from engine.worldstereo.defaults import HELP_GENERATE
 
 STAGES = (
     "Home",
@@ -70,8 +68,8 @@ STAGES = (
 HELP_HOME = """FIELD GUIDE
 2D Images (default) or 360 / text → 8K ERP → Compute geometry → rails → Generate → splat.ply (LiteGS or MCMC Compact).
 Ostris blocks 2D Generate until READY. h_fov 70. text keeps the trigger prefix.
-After 2D Images, prompt.txt = outpaint instruction + surroundings. Generate strips that green instruction; WAN fills black holes and must describe the pano.
-Preview the mesh flight. Four rails usually enough. Do not skip 8K. Extra rails do not fix glass.
+After 2D Images, prompt.txt = outpaint instruction + surroundings. Generate strips that green instruction.
+Preview the mesh flight. Four straight rails usually enough. Do not skip 8K. Extra rails do not fix glass.
 Download models: Hub cache is the install folder .hf_cache, ready files in models.
 Build LiteGS: compiles the vendored LiteGS CUDA kernels into this venv once (MSVC + CUDA 12.8), then records the 1-step spike in docs/env_report.txt. Train on the Splat tab is gated on that line. Never shipped in the installer (Inria non-commercial licence).
 
@@ -79,6 +77,28 @@ Votion 3DGS  2.0  Yik  MIT"""
 
 LOG_IDLE = """STATUS // idle
 Qt never imports torch. Dummy worker: 20 lines then exit. Stop kills the subprocess."""
+
+
+def _stops_the_job(text: str) -> bool:
+    """True when this log line is why a running job ended."""
+    low = text.lower()
+    if "out of memory" in low or "cuda error" in low or "vram //" in low:
+        return True
+    if low.startswith("traceback"):
+        return True
+    if "acceleratorerror:" in low or "outofmemoryerror:" in low or "runtimeerror:" in low:
+        return True
+    if text.startswith("STATUS // stopped"):
+        return True
+    if text.startswith("STATUS // crashed") or text.startswith("STATUS // process error"):
+        return True
+    if text.startswith("STATUS // exit "):
+        tail = text.removeprefix("STATUS // exit ").strip().split()[0]
+        try:
+            return int(tail) != 0
+        except ValueError:
+            return False
+    return False
 
 MANIFEST_PATH = REPO_ROOT / "tools" / "model_manifest.json"
 
@@ -289,8 +309,6 @@ class MainWindow(QMainWindow):
         self._sfm_points = "0"
         self._sfm_sparse = ""
         self._sfm_preview = ""
-        self._wan_queue: list[list[str]] = []
-        self._hires_queue: list[list[str]] = []
         self._gpu_names = gpu_names()
         self._manifest = _read_manifest()
 
@@ -430,6 +448,8 @@ class MainWindow(QMainWindow):
         model = self.profile.model()
         model.item(1).setEnabled(False)
         model.item(2).setEnabled(False)
+        model.item(1).setToolTip("Not in this build.")
+        model.item(2).setToolTip("Not in this build.")
         r.addWidget(self.profile)
         self.profile.currentIndexChanged.connect(self._on_profile)
 
@@ -605,10 +625,34 @@ class MainWindow(QMainWindow):
         self.live.style().polish(self.live)
 
     def _append_log(self, text: str) -> None:
-        if not text:
+        body = text.rstrip("\n")
+        if not body:
             return
-        self.log.append(text.rstrip("\n"))
-        self.log.moveCursor(self.log.textCursor().MoveOperation.End)
+        fatal = _stops_the_job(body)
+        cursor = self.log.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        if self.log.toPlainText():
+            cursor.insertBlock()
+        block = QTextBlockFormat()
+        char = QTextCharFormat()
+        if fatal:
+            block.setBackground(QColor("#6b2418"))
+            char.setForeground(QColor("#ffe8e0"))
+            char.setFontWeight(QFont.Weight.DemiBold)
+            self.btn_log.setChecked(True)
+        else:
+            char.setForeground(QColor("#8b9bb4"))
+        lines = body.splitlines() or [body]
+        cursor.setBlockFormat(block)
+        cursor.setCharFormat(char)
+        cursor.insertText(lines[0])
+        for line in lines[1:]:
+            cursor.insertBlock()
+            cursor.setBlockFormat(block)
+            cursor.setCharFormat(char)
+            cursor.insertText(line)
+        self.log.setTextCursor(cursor)
+        self.log.ensureCursorVisible()
 
     def _download_set(self) -> str:
         return "p1" if self.radio_p1.isChecked() else "all"
@@ -625,12 +669,13 @@ class MainWindow(QMainWindow):
             "lora",
             "lora_outpaint",
             "realesrgan",
-            "wan14",
-            "lora_pano",
-            "lora_lightx2v",
             "umt5",
             "clip_vision",
             "ultrasharp",
+            "worldstereo_fp8",
+            "worldstereo_config",
+            "dinov2",
+            "wan480_config",
         ]
         for key in order:
             entry = shown.get(key)
@@ -643,25 +688,11 @@ class MainWindow(QMainWindow):
                     (entry["id"], entry["label"], f"MISSING_{entry['id']}", "MISSING")
                 )
         if download_set == "p1":
-            wan = next(e for e in self._manifest["files"] if e["id"] == "wan14")
-            if _is_ready(REPO_ROOT, wan):
-                rows.append((wan["id"], wan["label"], "READY", "READY"))
-            else:
-                rows.append((wan["id"], wan["label"], "P3 — not this default", "NOTE"))
             moge = next(e for e in self._manifest["files"] if e["id"] == "moge")
             if _is_ready(REPO_ROOT, moge):
                 rows.append((moge["id"], moge["label"], "READY", "READY"))
             else:
                 rows.append((moge["id"], moge["label"], "P2 subset", "NOTE"))
-        by_id = {e["id"]: e for e in self._manifest["files"]}
-        for key in ("worldstereo_fp8", "worldstereo_config", "dinov2", "wan480_config"):
-            entry = by_id.get(key)
-            if entry is None:
-                continue
-            if _is_ready(REPO_ROOT, entry):
-                rows.append((entry["id"], entry["label"], "READY", "READY"))
-            else:
-                rows.append((entry["id"], entry["label"], f"MISSING_{entry['id']}", "MISSING"))
         for info in self._manifest.get("info_rows", []):
             rows.append((info["id"], info["label"], info["note"], "NOTE"))
         return rows
@@ -809,40 +840,16 @@ class MainWindow(QMainWindow):
                     pass
             self._log_splat_line(parts, raw)
             return
-        if raw.startswith("WAN\t"):
-            parts = raw.split("\t")
-            if hasattr(self, "gen_page") and len(parts) >= 2:
-                kind = parts[1]
-                if kind == "rail" and len(parts) >= 5:
-                    self.gen_page.apply_wan_rail(int(parts[2]), parts[3], parts[4])
-                elif kind == "mask" and len(parts) >= 4:
-                    self.gen_page.apply_wan_preview(int(parts[2]), 0, parts[3], "", 0)
-                elif kind == "preview" and len(parts) >= 6:
-                    steps = int(parts[6]) if len(parts) >= 7 and parts[6] else 0
-                    self.gen_page.apply_wan_preview(int(parts[2]), int(parts[3]), parts[4], parts[5], steps)
-                elif kind == "frame" and len(parts) >= 6:
-                    self.gen_page.apply_wan_frame(int(parts[2]), int(parts[3]), parts[4], parts[5])
-                elif kind == "done" and len(parts) >= 4:
-                    self.gen_page.apply_wan_done(int(parts[2]), parts[3])
-                    if hasattr(self, "recon_page"):
-                        self.recon_page.refresh()
-            self._append_log(raw)
-            return
-        if raw.startswith("HIRES\t"):
-            parts = raw.split("\t")
-            if hasattr(self, "gen_page") and len(parts) >= 2:
-                kind = parts[1]
-                if kind == "frame" and len(parts) >= 6:
-                    self.gen_page.apply_hires_frame(int(parts[2]), int(parts[3]), parts[4], parts[5])
-            if hasattr(self, "recon_page") and len(parts) >= 2 and parts[1] == "done":
-                self.recon_page.refresh()
+        if raw.startswith("WAN\t") or raw.startswith("HIRES\t"):
             self._append_log(raw)
             return
         if raw.startswith("WS\t"):
             parts = raw.split("\t")
             if hasattr(self, "gen_page") and len(parts) >= 2:
                 kind = parts[1]
-                if kind == "retrieved" and len(parts) >= 4:
+                if kind == "view" and len(parts) >= 4:
+                    self.gen_page.show_ws(int(parts[2]), "view", view=parts[3])
+                elif kind == "retrieved" and len(parts) >= 4:
                     self.gen_page.show_ws(int(parts[2]), "retrieved", int(parts[3]))
                 elif kind == "rail" and len(parts) >= 4:
                     self.gen_page.show_ws(int(parts[2]), parts[3])
@@ -923,18 +930,16 @@ class MainWindow(QMainWindow):
         if args[0] == "__gen_error__":
             self._append_log(f"STATUS // {args[1] if len(args) > 1 else 'generate error'}")
             return
-        if args[0] == "__hires__":
+        if args[0] == "__ws_hires__":
             if self._job_running():
                 self._append_log("STATUS // busy — Stop the current job first")
                 return
             scene = args[1] if len(args) > 1 else self.scene.text()
-            req = args[2] if len(args) > 2 else str(REPO_ROOT / "outputs" / scene / "_work" / "generate_request.json")
-            rails = self._rails_from_request(scene, req)
-            self._hires_queue = [hires_argv(scene, idx, req) for idx in rails]
-            self._append_log(f"STATUS // HiRes — {len(self._hires_queue)} rail(s), after WAN confirm")
+            self._append_log(f"STATUS // HiRes all for {scene} — WorldStereo frames")
             if hasattr(self, "gen_page"):
-                self.gen_page.on_generate_start(rails, kind="hires")
-            self._start_next_hires()
+                rails = getattr(self.gen_page, "_ws_order", None) or []
+                self.gen_page.on_generate_start(rails, kind="pinhole_hires")
+            self._start_job(pinhole_hires_argv(scene), "pinhole_hires")
             return
         if args[0] == "__worldstereo__":
             if self._job_running():
@@ -943,17 +948,22 @@ class MainWindow(QMainWindow):
             scene = args[1] if len(args) > 1 else self.scene.text()
             req = args[2] if len(args) > 2 else ""
             rails = [int(part) for part in (args[3] if len(args) > 3 else "").split(",") if part.strip()]
-            only = (args[4] if len(args) > 4 else "0") == "1"
-            start_rail = int(args[5]) if len(args) > 5 and str(args[5]).strip() else 0
-            seed = int(args[6]) if len(args) > 6 and str(args[6]).strip() else None
-            self._append_log(f"STATUS // WorldStereo request for {scene} rails={rails}")
+            run_mode = args[4] if len(args) > 4 else "resume"
+            seed = int(args[5]) if len(args) > 5 and str(args[5]).strip() else None
+            regen_text = args[6] if len(args) > 6 else ""
+            regen = int(regen_text) if str(regen_text).strip() else None
+            gen_mode = args[7].strip() if len(args) > 7 and str(args[7]).strip() else "joint"
+            self._append_log(
+                f"STATUS // WorldStereo request for {scene} rails={rails} mode={run_mode} generation={gen_mode}"
+            )
             if hasattr(self, "gen_page"):
-                self.gen_page.on_generate_start(rails or [start_rail], kind="worldstereo")
+                self.gen_page.on_generate_start(rails, kind="worldstereo")
             self._start_job(
                 worldstereo_argv(
                     scene,
-                    start_rail=start_rail,
-                    only=only,
+                    mode=gen_mode,
+                    resume=run_mode != "restart",
+                    regen_rail=regen,
                     request=req or None,
                     rails=rails or None,
                     seed=seed,
@@ -961,28 +971,6 @@ class MainWindow(QMainWindow):
                 "worldstereo",
             )
             return
-        if args[0] != "__generate__":
-            return
-        if self._job_running():
-            self._append_log("STATUS // busy — Stop the current job first")
-            return
-        scene = args[1] if len(args) > 1 else self.scene.text()
-        req = args[2] if len(args) > 2 else str(REPO_ROOT / "outputs" / scene / "_work" / "generate_request.json")
-        missing = args[3] if len(args) > 3 else ""
-        self._append_log(f"STATUS // generate request written for {scene}")
-        if missing:
-            for ident in [p for p in missing.split(",") if p]:
-                self._append_log(f"MISSING_{ident} Download models set All")
-            self._append_log("STATUS // WAN weights missing — not starting")
-            return
-        rails = self._rails_from_request(scene, req)
-        self._wan_queue = [wan_argv(scene, idx, req) for idx in rails]
-        self._append_log(
-            f"STATUS // WAN Diffusers — {len(self._wan_queue)} rail(s), one process each, unload 14B between"
-        )
-        if hasattr(self, "gen_page"):
-            self.gen_page.on_generate_start(rails, kind="wan")
-        self._start_next_wan()
 
     def _on_recon_job(self, args: list[str]) -> None:
         if not args:
@@ -992,21 +980,6 @@ class MainWindow(QMainWindow):
                 self.gen_page.refresh(keep_preview=True)
             if hasattr(self, "recon_page"):
                 self.recon_page.refresh()
-            return
-        if args[0] == "__wan_rails__":
-            scene = args[1] if len(args) > 1 else self.scene.text()
-            rails = [int(x) for x in (args[2] if len(args) > 2 else "0").split(",") if x.strip() != ""]
-            self._show_stage("Generate")
-            if hasattr(self, "gen_page"):
-                self.gen_page.request_wan_rails(rails)
-            return
-        if args[0] == "__sfm__":
-            scene = args[1] if len(args) > 1 else self.scene.text()
-            self._sfm_images = "0"
-            self._sfm_points = "0"
-            self._sfm_sparse = ""
-            self._sfm_preview = ""
-            self._start_job(sfm_argv(scene), "sfm")
             return
         if args[0] == "__known_pose__":
             scene = args[1] if len(args) > 1 else self.scene.text()
@@ -1163,18 +1136,6 @@ class MainWindow(QMainWindow):
         if self._start_job(argv, "splat"):
             self.splat_page.on_worker_started("train")
 
-    def _start_next_wan(self) -> None:
-        if not self._wan_queue:
-            return
-        argv = self._wan_queue.pop(0)
-        self._start_job(argv, "wan")
-
-    def _start_next_hires(self) -> None:
-        if not self._hires_queue:
-            return
-        argv = self._hires_queue.pop(0)
-        self._start_job(argv, "hires")
-
     def _show_stage(self, name: str) -> None:
         if name not in STAGES:
             return
@@ -1265,7 +1226,7 @@ class MainWindow(QMainWindow):
     def _on_proc_error(self, error: QProcess.ProcessError) -> None:
         if self._expect_kill:
             return
-        self._append_log(f"STATUS // process error {error.name}")
+        self._append_log(f"STATUS // stopped — process error {error.name}")
 
     def _on_proc_finished(self, code: int, status: QProcess.ExitStatus) -> None:
         if self._out_buf:
@@ -1274,9 +1235,11 @@ class MainWindow(QMainWindow):
         if self._expect_kill:
             self._append_log("STATUS // cancelled")
         elif status == QProcess.ExitStatus.CrashExit:
-            self._append_log("STATUS // crashed")
+            self._append_log("STATUS // stopped — crashed")
+        elif code != 0:
+            self._append_log(f"STATUS // stopped — exit {code}")
         else:
-            self._append_log(f"STATUS // exit {code}")
+            self._append_log("STATUS // exit 0")
         label = self._job_label
         cancelled = self._expect_kill
         self._expect_kill = False
@@ -1287,22 +1250,9 @@ class MainWindow(QMainWindow):
         self.job_strip.set_idle()
         self._refresh_status()
         self._proc = None
-        if cancelled or (label == "wan" and code != 0):
-            self._wan_queue = []
-        if cancelled or (label == "hires" and code != 0):
-            self._hires_queue = []
-        if label == "wan" and (not cancelled) and code == 0 and self._wan_queue:
-            self._start_next_wan()
-            return
-        if label == "hires" and (not cancelled) and code == 0 and self._hires_queue:
-            self._start_next_hires()
-            return
         if hasattr(self, "gen_page"):
-            more = (label == "wan" and bool(self._wan_queue)) or (
-                label == "hires" and bool(self._hires_queue)
-            )
-            self.gen_page.on_job_finished(label, code, more=more)
-        if hasattr(self, "recon_page") and label in ("wan", "hires", "worldstereo"):
+            self.gen_page.on_job_finished(label, code, more=False)
+        if hasattr(self, "recon_page") and label in ("worldstereo", "pinhole_hires"):
             self.recon_page.refresh()
         if hasattr(self, "geo_page"):
             self.geo_page.on_job_finished(label, code)
@@ -1321,8 +1271,6 @@ class MainWindow(QMainWindow):
             self._append_log("STATUS // idle (nothing to stop)")
             return
         self._expect_kill = True
-        self._wan_queue = []
-        self._hires_queue = []
         self._append_log("STATUS // cancel — killing subprocess")
         self._proc.kill()
 

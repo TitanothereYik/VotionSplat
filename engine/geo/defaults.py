@@ -8,7 +8,7 @@ P3: four SMPL knot sets (nodes 27, 122, 133, 144) + optional 5th (node 157).
 from __future__ import annotations
 
 LOOK_MODES = ("look_forward", "look_at_target", "per_point_look")
-LOOK_DEFAULT = "look_at_target"
+LOOK_DEFAULT = "look_forward"
 
 LENGTH_DEFAULT = 81
 LENGTH_MIN = 9
@@ -28,7 +28,16 @@ ANCHORS_DEFAULT = """0.000, 0.000, 0.000
 -0.184, -0.093, 0.920
 -0.065, 0.039, 1.404"""
 
-DEFAULT_RAIL_COUNT = 4  # first-open SMPL seed + Suggest paths fill
+DEFAULT_RAIL_COUNT = 4  # first-open straight rails + Suggest paths fill
+STRAIGHT_RAIL_LENGTH = 1.5  # metres, editor frame, before the cloud shortens it
+STRAIGHT_WALL_FRACTION = 0.8  # keep the default end inside the MoGe cloud
+# Unit directions in the editor frame (+Y up, +Z = pano centre).
+STRAIGHT_RAILS = (
+    {"label": "forward", "direction": (0.0, 0.0, 1.0)},
+    {"label": "back", "direction": (0.0, 0.0, -1.0)},
+    {"label": "left", "direction": (-1.0, 0.0, 0.0)},
+    {"label": "right", "direction": (1.0, 0.0, 0.0)},
+)
 MIN_RAILS = 1  # rail 1 (SMPL node 27) stays; user may remove 2–5
 MAX_RAILS = 5  # graph CAMERA 1–4 + optional Add-to-dataset id 157
 SUGGEST_COUNT = 4  # SplatKit suggest_paths default; function cap is 8
@@ -91,10 +100,12 @@ SMPL_RAILS = (
 
 HELP_GEOMETRY = """GEOMETRY
 Compute geometry first. FLOOR / SIDE / Preview stay empty until then.
-First open seeds four SMPL rails (+ optional 5th). Remove down to rail 1 (default); Add fills back up to 5.
-Suggest paths fits this room (cap 8 in SplatKit; product fills four).
+First open seeds four straight look_forward rails: forward, back, left, right.
+Each is shortened to 80% of the free distance to the MoGe cloud so it does not start in a wall.
+A clips-wall hint warns when an edited rail still goes past the cloud. It does not block Confirm.
+Suggest paths stays as the fit-this-room alternative. Remove down to rail 1; Add fills back up to 5.
 Active rail solid; others dimmed. Extra rails buy volume, not sharper views, and do not fix glass.
 Star is origin, not draggable. look_forward + drag arrow switches that rail to per_point_look.
 Play the mesh flight on the Preview pane before Confirm rails. Confirm gates Generate.
-moge_level 9 is shared (not fps). HiRes stays 6. Do not mix levels.
+moge_level 9 is shared (not fps).
 """

@@ -1,4 +1,4 @@
-"""Phase 2/3 Reconstruct page — keep or ditch rails, then SphereSfM."""
+"""Reconstruct page — keep or ditch rails, then known-pose COLMAP."""
 
 from __future__ import annotations
 
@@ -6,7 +6,6 @@ import json
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QComboBox,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -22,16 +21,9 @@ from engine.geo.rails import (
     kept_rail_indices,
     set_dataset_rail,
     sync_dataset_from_confirmed,
-    wan_video_rel,
 )
 from engine.pano.scene_io import scene_dir
-from engine.sfm.dataset_source import (
-    SOURCE_KNOWN,
-    colmap_root,
-    keyframe_count,
-    known_selected,
-    write_source,
-)
+from engine.sfm.dataset_source import colmap_root, keyframe_count
 
 
 def _lab(text: str) -> QLabel:
@@ -45,27 +37,31 @@ def _rails_that_retrieved(root, rail_index: int) -> str:
     bank = root / "worldstereo" / "rails"
     if not bank.is_dir():
         return ""
-    needle = f"view{int(rail_index):02d}/"
+    needles = (f"view{int(rail_index):02d}_", f"view{int(rail_index):02d}/")
     hits = []
-    for folder in sorted(bank.iterdir()):
-        if not folder.is_dir():
-            continue
-        head = folder.name.split("_", 1)[0]
-        if not head.isdigit():
-            continue
-        other = int(head)
-        if other <= int(rail_index):
-            continue
-        path = folder / "retrieved.json"
-        if not path.is_file():
+    for path in sorted(bank.rglob("retrieved.json")):
+        other = _rail_index_of(path, bank)
+        if other is None or other <= int(rail_index):
             continue
         try:
             names = json.loads(path.read_text(encoding="utf-8")).get("fnames") or []
         except json.JSONDecodeError:
             continue
-        if any(needle in str(name) for name in names):
-            hits.append(str(other + 1))
+        if any(any(needle in str(name) for needle in needles) for name in names):
+            label = str(other + 1)
+            if label not in hits:
+                hits.append(label)
     return ", ".join(hits)
+
+
+def _rail_index_of(path, bank) -> int | None:
+    head = path.relative_to(bank).parts[0]
+    if head.startswith("rail_") and len(head) >= 7 and head[5:7].isdigit():
+        return int(head[5:7])
+    prefix = head.split("_", 1)[0]
+    if prefix.isdigit():
+        return int(prefix)
+    return None
 
 
 def _hint(text: str) -> QLabel:
@@ -103,8 +99,8 @@ class ReconstructPage(QWidget):
         r.addWidget(_lab("Rails in dataset"))
         r.addWidget(
             _hint(
-                "Ditch a rail if WAN invented something you do not want. "
-                "Re-gen WAN after editing the prompt on Generate, or after a new Play on Geometry."
+                "Ditch a rail you do not want in the dataset. "
+                "Re-gen resamples that rail's views and marks later rails stale."
             )
         )
         self.rail_host = QWidget()
@@ -113,22 +109,7 @@ class ReconstructPage(QWidget):
         self.rail_lay.setSpacing(6)
         r.addWidget(self.rail_host)
 
-        r.addWidget(_lab("Dataset source"))
-        self.dataset_source = QComboBox()
-        self.dataset_source.addItem("SphereSfM (WAN)")
-        self.dataset_source.addItem("Known poses (WorldStereo)")
-        self.dataset_source.model().item(1).setToolTip(
-            "COLMAP from WorldStereo poses and keyframes. Does not run SphereSfM "
-            "and does not change the WAN colmap folder or splat.ply."
-        )
-        self.dataset_source.blockSignals(True)
-        if known_selected(self._scene_name()):
-            self.dataset_source.setCurrentIndex(1)
-        self.dataset_source.blockSignals(False)
-        self.dataset_source.currentIndexChanged.connect(self._on_source)
-        r.addWidget(self.dataset_source)
-
-        r.addWidget(_lab("SphereSfM"))
+        r.addWidget(_lab("Known poses"))
         self.btn_recon = QPushButton("Reconstruct")
         self.btn_recon.setObjectName("btnPrimary")
         self.btn_recon.setEnabled(False)
@@ -188,7 +169,6 @@ class ReconstructPage(QWidget):
         self.dataset_source.blockSignals(False)
 
     def refresh(self, *, load_sparse: bool = True) -> None:
-        self._sync_source_combo()
         while self.rail_lay.count():
             item = self.rail_lay.takeAt(0)
             w = item.widget()
@@ -201,14 +181,9 @@ class ReconstructPage(QWidget):
         confirmed = gate.is_file()
         data = sync_dataset_from_confirmed(scene) if confirmed else {"rails": []}
         rows = data.get("rails") or []
-        kept_ready = 0
         for row in rows:
             idx = int(row.get("index", 0))
             keep = bool(row.get("keep", True))
-            wan = root / str(row.get("wan") or wan_video_rel(idx))
-            has_wan = wan.is_file() and wan.stat().st_size > 0
-            if keep and has_wan:
-                kept_ready += 1
             block = QWidget()
             col = QVBoxLayout(block)
             col.setContentsMargins(0, 0, 0, 0)
@@ -218,11 +193,13 @@ class ReconstructPage(QWidget):
             name.setProperty("class", "fLab")
             later = _rails_that_retrieved(root, idx)
             extra = f" · retrieved by {later}" if later else ""
-            if self._known():
-                kf = keyframe_count(scene, idx)
-                label = "ditched" if not keep else (f"{kf} keyframes" if kf else "no keyframes")
+            kf = keyframe_count(scene, idx)
+            if not keep:
+                label = "ditched"
+            elif kf:
+                label = f"{kf} keyframes"
             else:
-                label = "ditched" if not keep else ("WAN" if has_wan else "no WAN")
+                label = "no keyframes"
             state = QLabel(label + extra)
             state.setProperty("class", "fHint")
             state.setAlignment(Qt.AlignmentFlag.AlignRight)
@@ -236,7 +213,7 @@ class ReconstructPage(QWidget):
             ditch.setChecked(keep)
             ditch.setProperty("class", "modeChip")
             ditch.clicked.connect(lambda on, rail=idx: self._on_keep(rail, bool(on)))
-            regen = QPushButton("Re-gen WAN")
+            regen = QPushButton("Re-gen")
             regen.setProperty("class", "rail-mini")
             regen.clicked.connect(lambda _=False, rail=idx: self._on_regen(rail))
             btns.addWidget(ditch)
@@ -244,26 +221,14 @@ class ReconstructPage(QWidget):
             col.addLayout(btns)
             self.rail_lay.addWidget(block)
 
-        if self._known():
-            kf_ready = sum(1 for idx in kept_rail_indices(scene) if keyframe_count(scene, idx) > 0)
-            self.btn_recon.setEnabled(kf_ready > 0)
-            if kf_ready == 0:
-                self.gate_hint.setText("No kept rail has WorldStereo keyframes yet.")
-            else:
-                self.gate_hint.setText(
-                    f"{kf_ready} kept rail(s) with keyframes. Reconstruct writes worldstereo/dataset. "
-                    "The WAN COLMAP model is left as it is."
-                )
+        kf_ready = sum(1 for idx in kept_rail_indices(scene) if keyframe_count(scene, idx) > 0)
+        self.btn_recon.setEnabled(kf_ready > 0 and not self._sfm_busy)
+        if kf_ready == 0:
+            self.gate_hint.setText("No kept rail has WorldStereo keyframes yet.")
         else:
-            self.btn_recon.setEnabled(confirmed and kept_ready > 0)
-            if not confirmed:
-                self.gate_hint.setText("Play each rail on Geometry, then Confirm rails.")
-            elif kept_ready == 0:
-                self.gate_hint.setText("Keep at least one rail with a WAN clip, or Generate WAN first.")
-            else:
-                self.gate_hint.setText(
-                    f"{kept_ready} kept rail(s) with WAN. Reconstruct uses those clips. Dual-res HiRes frames if present."
-                )
+            self.gate_hint.setText(
+                f"{kf_ready} kept rail(s) with keyframes. Reconstruct writes worldstereo/dataset."
+            )
         if self._sfm_busy or not load_sparse:
             return
         self.show_latest_sparse(announce=False)
@@ -285,15 +250,31 @@ class ReconstructPage(QWidget):
         if sparse and not self._sfm_busy:
             self.sparse.load(sparse, force=force)
 
-    def _known(self) -> bool:
-        return self.dataset_source.currentIndex() == 1
+    def _on_regen(self, rail_index: int) -> None:
+        set_dataset_rail(self._scene_name(), rail_index, keep=True)
+        scene = self._scene_name()
+        rails = kept_rail_indices(scene)
+        self.requestJob.emit(
+            [
+                "__worldstereo__",
+                scene,
+                "",
+                ",".join(str(int(i)) for i in rails),
+                "regen",
+                "",
+                str(int(rail_index)),
+                "rail",
+            ]
+        )
 
-    def _on_source(self, index: int) -> None:
-        write_source(self._scene_name(), SOURCE_KNOWN if int(index) == 1 else "wan")
-        self.refresh()
+    def _on_reconstruct(self) -> None:
+        if not self.btn_recon.isEnabled():
+            return
+        self.begin_reconstruct()
+        self.requestJob.emit(["__known_pose__", self._scene_name()])
 
     def show_latest_sparse(self, *, announce: bool = True) -> None:
-        """Read the selected dataset's sparse/0 and sfm.json."""
+        """Read worldstereo/dataset sparse/0 and sfm.json."""
         root = colmap_root(scene_dir(self._scene_name()))
         meta_path = root / "sfm.json"
         sparse = root / "sparse" / "0"
@@ -321,10 +302,7 @@ class ReconstructPage(QWidget):
         self.num_images.setText("—")
         self.num_points.setText("—")
         self.sparse.clear("Reconstructing…")
-        if self._known():
-            self.gate_hint.setText("Known-pose dataset running. The WAN COLMAP model is not modified.")
-        else:
-            self.gate_hint.setText("SphereSfM running. Viewport updates when Reconstruct finishes.")
+        self.gate_hint.setText("Known-pose dataset running. Leftover WAN files on disk are not modified.")
 
     def on_sfm_finished(self, code: int) -> None:
         self._sfm_busy = False
@@ -343,14 +321,3 @@ class ReconstructPage(QWidget):
         set_dataset_rail(self._scene_name(), rail_index, keep=bool(keep))
         self.requestJob.emit(["__dataset__"])
         self.refresh()
-
-    def _on_regen(self, rail_index: int) -> None:
-        set_dataset_rail(self._scene_name(), rail_index, keep=True)
-        self.requestJob.emit(["__wan_rails__", self._scene_name(), str(int(rail_index))])
-
-    def _on_reconstruct(self) -> None:
-        if not self.btn_recon.isEnabled():
-            return
-        self.begin_reconstruct()
-        kind = "__known_pose__" if self._known() else "__sfm__"
-        self.requestJob.emit([kind, self._scene_name()])

@@ -198,7 +198,7 @@ def encode_then_drop(prompt: str, image_path: Path) -> tuple[torch.Tensor, torch
     from PIL import Image
     from transformers import AutoTokenizer, CLIPImageProcessor
 
-    from engine.video.wan_runtime import load_umt5
+    from engine.worldstereo.encoders import load_umt5
 
     cfg = WAN_CFG
     tokenizer = AutoTokenizer.from_pretrained(str(cfg / "tokenizer"), local_files_only=True)
@@ -246,7 +246,7 @@ def load_clip_vision(cfg_root: Path):
     from safetensors.torch import load_file
     from transformers import CLIPVisionConfig, CLIPVisionModel
 
-    from engine.video.wan_runtime import CLIP_VISION
+    from engine.worldstereo.encoders import CLIP_VISION
 
     config = CLIPVisionConfig.from_pretrained(str(cfg_root / "image_encoder"), local_files_only=True)
     model = CLIPVisionModel(config)
@@ -266,10 +266,9 @@ def load_clip_vision(cfg_root: Path):
 def load_vae():
     from diffusers import AutoencoderKLWan
 
-    from engine.video import defaults as video_defaults
-    from engine.video.wan_runtime import _from_single_file
+    from engine.worldstereo.encoders import VAE_FILE, _from_single_file
 
-    path = ROOT / "models" / "vae" / video_defaults.VAE_FILE
+    path = ROOT / "models" / "vae" / VAE_FILE
     vae = _from_single_file(AutoencoderKLWan, path, dtype=torch.bfloat16)
     vae.enable_tiling()
     vae.eval()

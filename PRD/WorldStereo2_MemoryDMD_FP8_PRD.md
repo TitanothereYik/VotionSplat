@@ -139,7 +139,9 @@ Do **not** write `panorama.png` into the input folder: its presence triggers the
 | Global point cloud (GGM) | MoGe on the 8K pano at `moge_level` 9 (same run Plot Camera uses). Export points, not the mesh. Sky handling: copy what Plot Camera already does; do not invent a sky segmenter |
 | Initial memory bank | Perspective cuts of the 8K pano at the origin. WorldStereo 1.0 used 27 views at 90°×120° FoV; HY-World 2.0 says “perspective views subdivided from the input panorama”. Read the count and FoV from the code at pin |
 | Trajectory poses | Plot Camera rail, `length` 81, every 4th frame → **21 poses** (0, 4, …, 80). Matches `nframe: 21` in the `memory-dmd` config. Rails already start at the star, which is where the memory bank was cut |
-| Direction per rail | Pinhole camera looking along the rail’s orientation mode (`look_forward`, `look_at_target`, `per_point_look`). **Views per rail** setting: 1 (forward, default) up to 4 (forward plus yaw offsets). Each direction is its own trajectory |
+| Direction per rail | The rail's own look is **front**. Up to six views: front, back, left, right, up, down. Front is always on. Up and down are outside the training range (`START_ELEVATION` 5°) and are generated last, with `ood_view` in `meta.json` |
+| Frame layout | **Spaced** (default). Slot order is front, left, right, up, down, back, repeating across the 21 rail positions, so six views make the same number of kept images as one view. Each non-front run prepends an anchor at rail position 0 (pano cut at the origin) and discards it after sampling. **Separate** still runs a full 21-frame trajectory per view. Generation order stays front, back, left, right, up, down |
+| Default rails | Four straight `look_forward` lines: forward, back, left, right. Shortened to 80% of the free distance to the MoGe cloud. Suggest paths stays. Previously confirmed rails are kept |
 | `start_frame.png` | Pinhole cut of the 8K pano at the origin facing that direction, at the generation size |
 | `render.mp4` / `render_mask.mp4` | Point-cloud render of the MoGe cloud along the 21 poses. Match the training renderer from the config: `render_radius` 0.008, `points_per_pixel` 8, `background_color` black. Mask polarity: read from the code at pin, record it here (**UNKNOWN** now) |
 | Intrinsics | From the chosen size bucket and FoV. Field of view: **UNKNOWN**, read from the example `camera.json` at pin |
@@ -158,9 +160,9 @@ The FP8 file is Kijai-style **scaled** FP8 with diffusers key names (`blocks.0.a
 | Which tensors are FP8 | 549 rank-2 Linear weights (attention Q/K/V/O, FFN, ControlNet linears), each with a `<name>.scale_weight` BF16 scalar. Conv, norms, biases, `time_*`, `add_*` (I2V image cross-attention) stay BF16 |
 | Marker | A `scaled_fp8` tensor is present; the loader checks it and refuses a file without it |
 | Ampere path | Replace each FP8 `nn.Linear` with a module that keeps the weight in `float8_e4m3fn` and computes `F.linear(x, w.to(x.dtype) * scale, bias)` per call. **No speed-up on the 3090** (no FP8 matmul); the gain is memory only |
-| Do not | Dequantize the whole DiT to BF16 at load (`engine/video/wan_runtime.py::dequant_fp8_scaled` style). That is ~35 GB and defeats the point |
+| Do not | Dequantize the whole DiT to BF16 at load (`engine/worldstereo/encoders.py` does that only for umT5). That is ~35 GB for the DiT and defeats the point |
 | Code | `engine/worldstereo/fp8.py`. Own implementation from the recipe on the model card; do not copy ComfyUI-WanVideoWrapper code |
-| Text encoder, CLIP-Vision, VAE | Wan 2.1 I2V 480P and 720P share umT5-XXL, CLIP-Vision H and the Wan 2.1 VAE. Reuse Votion’s existing manifest files (`umt5_xxl_fp8_e4m3fn_scaled.safetensors`, `clip_vision_h.safetensors`, `wan_2.1_vae.safetensors`) and the loaders in `wan_runtime.py`. **Spike:** confirm WorldStereo’s pipeline accepts those modules; if it needs the `Wan-AI/Wan2.1-I2V-14B-480P-Diffusers` subfolders instead, add them to the manifest by exact filename at pin |
+| Text encoder, CLIP-Vision, VAE | Wan 2.1 I2V 480P and 720P share umT5-XXL, CLIP-Vision H and the Wan 2.1 VAE. Loaders live in `engine/worldstereo/encoders.py`. |
 | Keyframe-VAE | WorldStereo encodes each keyframe independently (spatial-only compression). It reuses the Wan VAE weights; confirm at pin |
 | Order on GPU | Encode text and CLIP first, move them off GPU, then load the FP8 DiT. Text encoder never resident with the DiT |
 
@@ -182,41 +184,45 @@ Fallback if PyTorch3D will not build on Windows: `engine/worldstereo/render.py`,
 
 ### 4.5 Generation worker
 
-`engine.workers.worldstereo`, one process for the whole scene (unlike WAN’s one process per rail), because the memory bank lives across rails.
+`engine.workers.worldstereo`, one process for the whole scene, because the memory bank lives across rails and views. Generate resumes. Start over clears `worldstereo/rails` and `worldstereo/memory` after a confirmation.
 
 1. Load once: text encoder pass, CLIP pass, unload; FP8 DiT; VAE; DINOv2.
-2. Initialise the memory bank from the pano perspective cuts and the MoGe cloud.
-3. For each (rail, direction) in user order: build inputs, sample 4 DMD steps (CFG-free), decode keyframes, write them, update the memory bank (`align_nframe` frames).
-4. Persist the bank to disk after every trajectory: `<scene>/worldstereo/memory/after_<rail>_<dir>/`. Re-gen of rail k restores the bank saved after rail k−1.
-5. Emit `PROGRESS` lines per trajectory and per step to the job strip.
-6. Unload everything and exit. HiRes does **not** start automatically (same rule as WAN).
+2. Initialise the memory bank from the pano perspective cuts and the MoGe cloud. On resume, restore the snapshot written by the last finished trajectory.
+3. For each rail in user order, then each selected view in order front, back, left, right, up, down: sample 4 DMD steps, decode keyframes, write them, update the memory bank. Spaced passes `num_frames = 4*(k-1)+1` for a run of k frames (anchor included) and sets `align_nframe` to `min(8, k-1)` so a short run does not ask the memory bank for 8 frames.
+4. Persist the bank after every view at `memory/after_<view_id>/`. When the last selected view of a rail finishes, also write `memory/after_rail_NN/`. Re-gen of rail k restores the `after_rail` snapshot of the previous rail in the user order, resamples every selected view of rail k, and writes `STALE.txt` into later rails.
+5. A trajectory is finished when `meta.json` lists its keyframes, those files exist, and there is no `STALE.txt`. Separate runs still expect 21 frames. A folder whose `layout` does not match the request is unfinished. Generate skips finished ones. When the last spaced view of a rail finishes, write `rail_NN/combined/` with positions 000..020 interleaved.
+6. Emit `WS view` lines and `PROGRESS` lines. HiRes does not start automatically.
 
-Outputs per trajectory:
+Outputs per view:
 
 ```
-<scene>/worldstereo/rails/<rail>_<dir>/
-  keyframes/000.png … 020.png     480×832 RGB
-  render/000.png …                the conditioning render
-  mask/000.png …                  the conditioning mask
-  camera.json                     same poses fed in
-  retrieved.json                  which memory frames were used, per keyframe
-  meta.json                       seed, steps, bucket, weights SHA, wall time, peak VRAM
+<scene>/worldstereo/rails/rail_NN/<view>/
+  keyframes/000.png …             480×832 RGB. Separate is 000..020. Spaced uses that view's positions only, e.g. front `000,006,012,018`
+  render/render.mp4               the conditioning render, without the anchor
+  mask/render_mask.mp4            the conditioning mask, without the anchor
+  camera.json                     the kept rotated poses (no anchor)
+  retrieved.json                  which memory frames were used
+  meta.json                       seed, steps, bucket, weights SHA, wall time, peak VRAM, view, ood_view, layout, positions, anchor
 ```
 
-Do not overwrite WAN outputs. WorldStereo writes only under `<scene>/worldstereo/`.
+Spaced also writes `rail_NN/combined/keyframes/000.png` … `020.png`, `combined.json` (position, view, w2c), and a combined render and mask for the preview. The short-run wall time versus the 7439 s / 30.9 GB alpine_02 front trajectory is not measured yet.
+
+**2026-11-04.** Joint mode replaces Spaced, six-view Separate, and Dense. One sample covers every kept rail (10 frames each, 40 frames, out-and-back, frame 0 at the star). Per-rail generation stays, front view only, 21 frames. Forty keyframes is past the trained 21-frame clip. Quality, time, and VRAM of that sample are unmeasured.
+
+Do not delete leftover WAN files on disk. WorldStereo writes only under `<scene>/worldstereo/`.
 
 ### 4.6 Pinhole HiRes
 
 WorldStereo frames are ~0.4 MP. The Phase 3 rule still holds: sharpness comes from reprojecting the 8K pano through geometry, not from upscaling the generated frame.
 
-`engine/hires/pinhole.py`, after **Confirm WorldStereo → HiRes**:
+`engine/hires/pinhole.py`, one click, **HiRes all**. One process loads MoGe and `4x-UltraSharp` once and loops every kept rail and every generated view. A view whose `hires/` is already complete is skipped.
 
-- For each keyframe camera, render the 8K pano through MoGe geometry at `moge_level` **6** (the HiRes value, locked) into a pinhole at **2× the keyframe size** (960×1664). The output multiple is a setting; 2× is the default to measure.
-- Where the reprojection is valid, keep the 8K pixels. Where it is not, upsample the WorldStereo keyframe with `4x-UltraSharp` (the existing hole-fill upscaler) and use it.
-- Write `gate_masks` with the same meaning as Phase 3: white = 8K, black = generated.
-- Log mean coverage. Not a ship gate (same as Phase 3).
+- For each keyframe camera, render the 8K pano through MoGe geometry at `moge_level` **6** into a pinhole at **2× the keyframe size** (960×1664).
+- Where the reprojection is valid, keep the 8K pixels. Where it is not, upsample the WorldStereo keyframe with `4x-UltraSharp` and use it.
+- Write `hires/NNN.png` and `gate_masks/NNN.png`. White = 8K, black = generated.
+- Log mean coverage. Not a ship gate.
 
-The ERP HiRes path (`engine/workers/hires.py`, SplatKit `hires_composite`) is not modified.
+The ERP HiRes worker is removed. Git history is the only copy.
 
 ### 4.7 Known-pose dataset
 
@@ -287,21 +293,21 @@ tools\model_manifest.json           new entries, exact filenames, no invented si
 
 ### 4.11 Acceptance criteria
 
-- [x] G1, G2, G3 recorded in the certainty log with dates (Index #58–#60, 2026-10-29).
-- [ ] `env_report.txt` records: PyTorch3D status (or fallback renderer accepted), FP8 DiT load OK, peak VRAM and wall time for one trajectory on the 3090.
-- [ ] FP8 DiT stays resident; text encoder is never on GPU at the same time.
-- [ ] Four rails of `alpine_02`, one view each, generated in one worker run with memory carried across rails; `retrieved.json` shows rails 2–4 retrieving frames from earlier rails.
-- [ ] Re-gen of rail 2 restores the bank saved after rail 1 and marks rails 3–4 stale.
+- [x] G1, G2, G3 recorded in the certainty log with dates (Index #58–#60, 2026-10-29). #61 (2026-10-30) makes WorldStereo the Quality route.
+- [x] `env_report.txt` records one WorldStereo trajectory on the 3090 (21 frames, FP8 stayed scaled, text encoder off the GPU, peak about 30.85 GB).
+- [x] FP8 DiT stays resident; text encoder is never on GPU at the same time. Recorded on that spike.
+- [x] Four rails of `alpine_02`, one view each, generated in one worker run with memory carried across rails. That run used the old one-view folder layout.
+- [ ] Re-gen restores the previous rail's snapshot in the user order and marks later rails stale. The old index bug is fixed in code; it has not been run on the GPU.
 - [ ] Pinhole HiRes writes 960×1664 frames and `gate_masks`; mean coverage logged, not 0.0.
-- [ ] Known-pose COLMAP dataset loads in the LiteGS trainer and in Brush.
-- [ ] LiteGS trains it on the 3090 without OOM after the generator has exited.
-- [ ] The bake-off numbers in §8 are recorded next to the WAN baseline for the same scene.
-- [ ] Switching Generator back to WAN leaves every WAN output untouched.
+- [ ] Known-pose COLMAP for the six-view layout. The old one-view `alpine_02` dataset did train in LiteGS (hold-out about 28.5 dB). Brush was not checked. The new per-view names are not yet built.
+- [x] LiteGS trained the old one-view known-pose set on the 3090 without OOM after the generator had exited.
+- [ ] The bake-off numbers in §8. Not run. #61 is an owner decision, not that bake-off.
+- [x] WAN generator code is removed. Leftover WAN files on disk are not deleted by the app.
 - [ ] No ComfyUI, no WSL, no `torchrun`, no network call at run time (DINOv2, MoGe, weights all local).
 
 ### 4.12 Do not
 
-- Do not remove, disable, or change WAN, the pano LoRA, LightX2V, the ERP HiRes path, or SphereSfM.
+- Do not delete leftover WAN files on disk from the app. Git history is the only copy of the removed generator.
 - Do not install or import `HY-World-2.0` (WorldMirror, HY-Pano, WorldNav).
 - Do not write `panorama.png` into the WorldStereo input folder (VLM path).
 - Do not stretch 480p keyframes to the HiRes size and call it HiRes.
@@ -321,7 +327,7 @@ tools\model_manifest.json           new entries, exact filenames, no invented si
 | Quality | FP8 card: “<1% perceptible on short clips, faint colour drift possible on long sequences” | Whether colour drift shows across 4 rails × 21 frames |
 | Reliability | Bank persisted after each trajectory; Stop leaves the last finished trajectory valid | — |
 | Security | Local only, no telemetry, no hub calls at run time | — |
-| Licence | Code Apache-2.0 with NOTICE | Weights still UNKNOWN. Risk accepted in writing 2026-10-29 (Index #59). Not a settled MIT grant |
+| Licence | Code Apache-2.0 with NOTICE | Weights still UNKNOWN. Risk accepted for the default route 2026-10-30 (Index #61), and earlier for the experiment (Index #59). Not a settled MIT grant |
 
 ---
 
@@ -392,7 +398,7 @@ No calendar dates. Order:
 | WS-3 | Known-pose dataset + LiteGS train with 480p keyframes only (§4.7, §4.8) | First joint-fit and hold-out numbers |
 | WS-4 | Pinhole HiRes (§4.6), retrain | Numbers with 8K detail |
 | WS-5 | UI (§4.9), manifest, Help drawer text | §4.11 all ticked |
-| WS-6 | Bake-off decision (§8) | Owner keeps, graduates, or removes |
+| WS-6 | Owner decision, not the §8 bake-off | Closed 2026-10-30 (Index #61): WorldStereo is the Quality route. WAN code removed. |
 
 WS-3 before WS-4 on purpose: if consistency does not improve at 480p, pinhole HiRes is not worth building.
 

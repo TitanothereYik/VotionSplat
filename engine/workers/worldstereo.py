@@ -1,9 +1,10 @@
-"""WorldStereo worker: one process, every rail, one memory bank.
+"""WorldStereo worker: one process, one memory bank.
 
 Qt never imports this. Run as ``python -m engine.workers.worldstereo --scene NAME``.
 
-Outputs land under ``<scene>/worldstereo/`` only. WAN files are not written.
-HiRes does not start. An empty ``prompt.txt`` refuses the run.
+Joint mode writes ``<scene>/worldstereo/joint`` and splits each rail into
+``rails/rail_NN/front``. Per-rail mode writes one 21-frame front view per rail.
+An empty prompt refuses the run. Generate resumes by default.
 """
 
 from __future__ import annotations
@@ -24,34 +25,39 @@ os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 from engine.job import apply_huggingface_cache_env, job_progress
 from engine.pano.scene_io import prompt_path
 from engine.worldstereo import defaults as D
-from engine.worldstereo.adapter import build_scene, list_trajs
+from engine.worldstereo.adapter import build_joint_scene, build_scene, list_trajs
 
 
 def _log(msg: str) -> None:
     print(msg, flush=True)
 
 
+def _request(path: str) -> dict:
+    if not path:
+        return {}
+    file = Path(path)
+    if not file.is_file():
+        return {}
+    payload = json.loads(file.read_text(encoding="utf-8"))
+    return payload if isinstance(payload, dict) else {}
+
+
 def main(argv: list[str] | None = None) -> int:
     apply_huggingface_cache_env(os.environ)
-    parser = argparse.ArgumentParser(description="Votion WorldStereo (one process, all rails)")
+    parser = argparse.ArgumentParser(description="Votion WorldStereo (one process)")
     parser.add_argument("--scene", required=True)
-    parser.add_argument("--start-rail", type=int, default=0)
-    parser.add_argument("--limit", type=int, default=4)
-    parser.add_argument("--only", action="store_true")
+    parser.add_argument("--mode", default="", help="joint (default) or rail")
+    parser.add_argument("--resume", action="store_true", default=True)
+    parser.add_argument("--restart", action="store_true")
+    parser.add_argument("--regen-rail", type=int, default=-1)
     parser.add_argument("--prepare-only", action="store_true")
     parser.add_argument("--request", type=str, default="")
     parser.add_argument("--rails", default="")
     parser.add_argument("--seed", type=int, default=D.SEED)
     args = parser.parse_args(argv)
 
-    prompt = ""
-    views = 1
-    if args.request:
-        req_path = Path(args.request)
-        if req_path.is_file():
-            payload = json.loads(req_path.read_text(encoding="utf-8"))
-            prompt = str(payload.get("prompt") or "").strip()
-            views = int(payload.get("views") or 1)
+    payload = _request(args.request)
+    prompt = str(payload.get("prompt") or "").strip()
     if not prompt:
         path = prompt_path(args.scene)
         if path.is_file():
@@ -59,30 +65,56 @@ def main(argv: list[str] | None = None) -> int:
     if not prompt:
         _log("STATUS // empty prompt blocks Generate")
         return 2
-    if views != 1:
-        _log("STATUS // views per rail is 1 in this build (the rail direction)")
+
+    mode = str(args.mode or payload.get("mode") or "joint").strip().lower()
+    if mode not in {"joint", "rail"}:
+        _log(f"STATUS // unknown mode {mode}")
+        return 2
+    order: list[int] | None = None
+    if args.rails.strip():
+        order = [int(part) for part in args.rails.split(",") if part.strip()]
+
+    if mode == "joint":
+        if int(args.regen_rail) >= 0:
+            _log("STATUS // joint is one sample; --regen-rail ignored")
+        frames = payload.get("frames_per_rail")
+        frames_per_rail = D.JOINT_FRAMES_PER_RAIL if frames is None else int(frames)
+        rails = order or []
+        if not rails:
+            _log("STATUS // joint needs the kept rail list")
+            return 2
+        _log(f"STATUS // worldstereo prepare mode=joint rails={','.join(str(i) for i in rails)} frames_per_rail={frames_per_rail}")
+        job_progress(0, 1, "prepare joint")
+        try:
+            out = build_joint_scene(args.scene, rails, prompt, frames_per_rail=frames_per_rail)
+        except (FileNotFoundError, ValueError, RuntimeError) as exc:
+            _log(f"STATUS // {exc}")
+            return 2
+        _log(f"STATUS // worldstereo input {out}")
+        if args.prepare_only:
+            job_progress(1, 1, "inputs ready")
+            return 0
+        from engine.worldstereo.runtime import generate_joint
+
+        return generate_joint(
+            args.scene,
+            rails,
+            prompt,
+            frames_per_rail=frames_per_rail,
+            resume=not bool(args.restart),
+            seed=int(args.seed),
+        )
 
     try:
-        jobs = list_trajs(args.scene, limit=max(1, int(args.limit)))
+        jobs = list_trajs(args.scene, order=order)
     except FileNotFoundError as exc:
         _log(f"STATUS // {exc}")
         return 2
-    if args.rails.strip():
-        wanted = []
-        for part in args.rails.split(","):
-            part = part.strip()
-            if part:
-                wanted.append(int(part))
-        by_index = {job.rail_index: job for job in jobs}
-        ordered = [by_index[index] for index in wanted if index in by_index]
-        if not ordered:
-            _log("STATUS // rail order matched no Plot Camera rails")
-            return 2
-        jobs = ordered
-
     _log(
-        "STATUS // worldstereo prepare "
-        + " ".join(f"{job.rail_index}:{job.direction}" for job in jobs)
+        "STATUS // worldstereo prepare mode=rail jobs="
+        + str(len(jobs))
+        + " "
+        + " ".join(f"{job.rail_index}:{job.view}" for job in jobs[:12])
     )
     job_progress(0, len(jobs), "prepare inputs")
     try:
@@ -91,14 +123,20 @@ def main(argv: list[str] | None = None) -> int:
         _log(f"STATUS // {exc}")
         return 2
     _log(f"STATUS // worldstereo input {out}")
-    _log("WS\tinputs\tready")
     if args.prepare_only:
         job_progress(len(jobs), len(jobs), "inputs ready")
         return 0
-
     from engine.worldstereo.runtime import generate
 
-    return generate(args.scene, jobs, prompt, int(args.start_rail), bool(args.only), seed=int(args.seed))
+    regen = None if int(args.regen_rail) < 0 else int(args.regen_rail)
+    return generate(
+        args.scene,
+        jobs,
+        prompt,
+        resume=not bool(args.restart),
+        regen_rail=regen,
+        seed=int(args.seed),
+    )
 
 
 if __name__ == "__main__":

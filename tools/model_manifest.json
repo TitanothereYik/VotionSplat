@@ -88,46 +88,6 @@
       ]
     },
     {
-      "id": "wan14",
-      "label": "WAN 14B fp8",
-      "repo": "Kijai/WanVideo_comfy",
-      "hf_filename": "Wan2_1-I2V-14B-720P_fp8_e4m3fn.safetensors",
-      "filename": "Wan2_1-I2V-14B-720P_fp8_e4m3fn.safetensors",
-      "local_relative_path": "diffusion_models/Wan2_1-I2V-14B-720P_fp8_e4m3fn.safetensors",
-      "url": "https://huggingface.co/Kijai/WanVideo_comfy/blob/main/Wan2_1-I2V-14B-720P_fp8_e4m3fn.safetensors",
-      "public": true,
-      "sets": [
-        "all"
-      ],
-      "check_free_space": true
-    },
-    {
-      "id": "lora_pano",
-      "label": "Pano360 LoRA",
-      "repo": "mickmumpitz/Wan2.1-Pano360-LoRA",
-      "hf_filename": "pano_video_gen_720p_comfy.safetensors",
-      "filename": "pano_video_gen_720p_comfy.safetensors",
-      "local_relative_path": "loras/pano_video_gen_720p_comfy.safetensors",
-      "url": "https://huggingface.co/mickmumpitz/Wan2.1-Pano360-LoRA/blob/main/pano_video_gen_720p_comfy.safetensors",
-      "public": true,
-      "sets": [
-        "all"
-      ]
-    },
-    {
-      "id": "lora_lightx2v",
-      "label": "LightX2V LoRA",
-      "repo": "Kijai/WanVideo_comfy",
-      "hf_filename": "Lightx2v/lightx2v_T2V_14B_cfg_step_distill_v2_lora_rank64_bf16.safetensors",
-      "filename": "lightx2v_T2V_14B_cfg_step_distill_v2_lora_rank64_bf16.safetensors",
-      "local_relative_path": "loras/lightx2v_T2V_14B_cfg_step_distill_v2_lora_rank64_bf16.safetensors",
-      "url": "https://huggingface.co/Kijai/WanVideo_comfy/blob/main/Lightx2v/lightx2v_T2V_14B_cfg_step_distill_v2_lora_rank64_bf16.safetensors",
-      "public": true,
-      "sets": [
-        "all"
-      ]
-    },
-    {
       "id": "umt5",
       "label": "UMT5 xxL fp8",
       "repo": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
@@ -176,7 +136,7 @@
       "url": "https://huggingface.co/apozz/WorldStereo-fp8/resolve/main/WorldStereo-memory-dmd-fp8_e4m3fn_scaled.safetensors",
       "public": true,
       "expected_bytes": 20356086900,
-      "sets": ["worldstereo"]
+      "sets": ["all"]
     },
     {
       "id": "dinov2",
@@ -188,7 +148,7 @@
       "url": "https://huggingface.co/facebook/dinov2-base/resolve/main/model.safetensors",
       "public": true,
       "expected_bytes": 346345912,
-      "sets": ["worldstereo"]
+      "sets": ["all"]
     },
     {
       "id": "worldstereo_config",
@@ -201,7 +161,7 @@
       "url": "https://huggingface.co/hanshanxue/WorldStereo/resolve/main/worldstereo-memory-dmd/config.json",
       "public": true,
       "expected_bytes": 3452,
-      "sets": ["worldstereo"]
+      "sets": ["all"]
     },
     {
       "id": "wan480_config",
@@ -214,7 +174,7 @@
       "url": "https://huggingface.co/Wan-AI/Wan2.1-I2V-14B-480P-Diffusers/resolve/main/transformer/config.json",
       "public": true,
       "expected_bytes": 466,
-      "sets": ["worldstereo"]
+      "sets": ["all"]
     },
     {
       "id": "moge",

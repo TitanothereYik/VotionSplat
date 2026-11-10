@@ -116,9 +116,11 @@ class TrainView:
 
     @property
     def rail(self) -> str:
-        """Group key for the camera list: ``rail_03`` from ``rail_03_f012.png``, else stem prefix."""
+        """Group key: ``rail_00_front`` from ``rail_00_front_f000.png``, else ``rail_03``."""
         stem = Path(self.name).stem
         parts = stem.split("_")
+        if len(parts) >= 4 and parts[0] == "rail" and parts[3].startswith("f"):
+            return "_".join(parts[:3])
         if len(parts) >= 2 and parts[0].startswith("rail"):
             return "_".join(parts[:2])
         return parts[0] if parts else stem

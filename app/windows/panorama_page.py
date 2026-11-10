@@ -286,7 +286,7 @@ class PanoramaPage(QWidget):
         self.prompt_360.setPlaceholderText("Empty OK in P1")
         self.prompt_360.setFixedHeight(56)
         r.addWidget(self.prompt_360)
-        r.addWidget(_hint("Store as-is even if not 8192. Quality HiRes refuses other widths unless you Upscale to 8K."))
+        r.addWidget(_hint("Store as-is even if not 8192. Upscale to 8K when the panorama itself should be 8192 wide."))
         r.addWidget(_lab("Upscaler prompt"))
         self.upscaler_360 = QLineEdit(D.UPSCALER_PROMPT_DEFAULT)
         r.addWidget(self.upscaler_360)

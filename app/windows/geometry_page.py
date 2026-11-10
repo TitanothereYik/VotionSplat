@@ -37,9 +37,10 @@ from engine.geo.rails import (
     first_knot_off_origin,
     load_editor,
     next_free_rail_index,
+    rail_clips_wall,
     save_editor,
     seed_rails_for_scene,
-    smpl_rail,
+    straight_rail,
     suggestion_to_rail,
     write_confirmed,
 )
@@ -63,6 +64,7 @@ class GeometryPage(QWidget):
         self._scene_name = scene_name_fn
         self._geo_on = False
         self._rails: list[RailSpec] = default_rails()
+        self._cloud_pts: np.ndarray | None = None
         self._active = 0
         self._updating = False
         self._loaded_scene = ""
@@ -82,7 +84,7 @@ class GeometryPage(QWidget):
 
     def _rail(self) -> RailSpec:
         if not self._rails:
-            self._rails = [smpl_rail(0)]
+            self._rails = [straight_rail(0)]
             self._active = 0
         self._active = max(0, min(self._active, len(self._rails) - 1))
         return self._rails[self._active]
@@ -147,6 +149,11 @@ class GeometryPage(QWidget):
         self.origin_warn.setProperty("class", "fHint")
         self.origin_warn.setStyleSheet("color: #ff9a32;")
         r.addWidget(self.origin_warn)
+        self.wall_hint = QLabel("")
+        self.wall_hint.setWordWrap(True)
+        self.wall_hint.setProperty("class", "fHint")
+        self.wall_hint.setStyleSheet("color: #ff9a32;")
+        r.addWidget(self.wall_hint)
 
         r.addWidget(_lab("length"))
         self.length = QSpinBox()
@@ -318,6 +325,7 @@ class GeometryPage(QWidget):
             cols = data["colors"]
             self.floor.set_cloud(pts, cols)
             self.side.set_cloud(pts, cols)
+            self._cloud_pts = np.asarray(pts)
         self._set_geo_state(True)
         self._push_gizmos()
         self._sync_confirm()
@@ -426,6 +434,7 @@ class GeometryPage(QWidget):
         self.length.setValue(snap_length(spec.length))
         self._updating = False
         self._refresh_origin_warn()
+        self._refresh_wall_hint()
 
     def _persist(self) -> None:
         save_editor(self._scene_name(), self._rails, int(self.moge_level.value()), self._active)
@@ -435,10 +444,24 @@ class GeometryPage(QWidget):
         if first_knot_off_origin(self.anchors.toPlainText()):
             self.origin_warn.setText(
                 "First knot is far from origin — editor locks knot 0 to the star. "
-                "Coverage will be mostly Wan if a rail does not start at the pano center."
+                "Coverage will be mostly the generated frames if a rail does not start at the pano center."
             )
         else:
             self.origin_warn.setText("")
+
+    def _refresh_wall_hint(self) -> None:
+        points = self._cloud_pts
+        if points is None or getattr(points, "size", 0) == 0:
+            self.wall_hint.setText("")
+            return
+        clipping = [spec for spec in self._rails if rail_clips_wall(spec, points)]
+        if not clipping:
+            self.wall_hint.setText("")
+            return
+        names = ", ".join(f"rail {spec.index + 1}" for spec in clipping)
+        self.wall_hint.setText(
+            f"Clips wall: {names}. A sampled point is past the cloud. Confirm still works; shorten the rail if you want."
+        )
 
     def _show_video_still(self, path: Path) -> None:
         import cv2
@@ -526,6 +549,7 @@ class GeometryPage(QWidget):
         others = self._other_rails()
         self.floor.set_knots(knots, look, mode=mode, targets=targets, n_path=n_path, others=others)
         self.side.set_knots(knots, look, mode=mode, targets=targets, n_path=n_path, others=others)
+        self._refresh_wall_hint()
 
     def _write_anchor_box(self) -> None:
         spec = self._rail()
@@ -757,8 +781,7 @@ class GeometryPage(QWidget):
         nxt = next_free_rail_index(self._rails)
         if nxt is None:
             return
-        spec = smpl_rail(min(nxt, len(D.SMPL_RAILS) - 1))
-        spec.index = nxt
+        spec = straight_rail(nxt)
         spec.played = False
         spec.dirty = True
         self._pull_widgets_to_rail()

@@ -392,11 +392,6 @@ def print_status(manifest: dict, root: Path, download_set: str) -> None:
     for entry in select_entries(manifest, download_set):
         log(f"{entry['label']}\t{status_token(entry, root)}")
     if download_set == "p1":
-        wan = next(e for e in manifest["files"] if e["id"] == "wan14")
-        if is_ready(dest_path(root, wan)):
-            log(f"{wan['label']}\tREADY")
-        else:
-            log(f"{wan['label']}\tP3 — not this default")
         moge = next(e for e in manifest["files"] if e["id"] == "moge")
         if is_ready(dest_path(root, moge)):
             log(f"{moge['label']}\tREADY")

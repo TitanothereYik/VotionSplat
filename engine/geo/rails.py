@@ -11,9 +11,11 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
+
 from engine.geo import defaults as D
 from engine.geo.anchors import format_anchors, parse_anchors_ext, parse_point
-from engine.geo.rail import snap_length
+from engine.geo.rail import catmull_rom, snap_length
 from engine.pano.scene_io import scene_dir
 
 
@@ -58,10 +60,7 @@ def hires_frames_rel() -> str:
 
 
 def hires_proxies_rel() -> str:
-    """Downscaled copies of ``hires_frames_rel()`` at ``HIRES_PROXY_WIDTH``. The dual-res
-    SphereSfM path (``engine.workers.sfm``) poses on these — SPHERE poses are angular, so
-    8K buys nothing there and exhaustive matching stays cheap — then reprojects the
-    trainable cube faces from the full-res frames on disk."""
+    """Old ERP HiRes proxy path. The app no longer writes it."""
     return "hires/_spheresfm_work/proxies"
 
 
@@ -127,6 +126,84 @@ class RailSpec:
         return parse_point(self.look_at, (-0.108, 0.073, 1.953))
 
 
+def straight_anchors(direction: tuple[float, float, float], length: float) -> str:
+    vec = np.asarray(direction, dtype=np.float64)
+    norm = float(np.linalg.norm(vec))
+    if norm < 1e-8:
+        raise ValueError("rail direction is zero")
+    end = vec / norm * float(length)
+    return f"0.000, 0.000, 0.000\n{end[0]:.3f}, {end[1]:.3f}, {end[2]:.3f}"
+
+
+def straight_rail(index: int) -> RailSpec:
+    src = D.STRAIGHT_RAILS[int(index) % len(D.STRAIGHT_RAILS)]
+    return RailSpec(
+        index=int(index),
+        orientation="look_forward",
+        anchors=straight_anchors(src["direction"], D.STRAIGHT_RAIL_LENGTH),
+        look_at=D.LOOK_AT_DEFAULT,
+        length=D.LENGTH_DEFAULT,
+        label=str(src["label"]),
+        played=False,
+        dirty=True,
+    )
+
+
+def depth_along(points: np.ndarray, direction: np.ndarray, cos_min: float = 0.98) -> float | None:
+    """Nearest cloud range within a narrow cone around ``direction``. None if the cone is empty."""
+    pts = np.asarray(points, dtype=np.float64)
+    if pts.ndim != 2 or pts.shape[0] == 0:
+        return None
+    vec = np.asarray(direction, dtype=np.float64)
+    norm = float(np.linalg.norm(vec))
+    if norm < 1e-8:
+        return None
+    unit = vec / norm
+    ranges = np.linalg.norm(pts, axis=1)
+    keep = ranges > 0.15
+    if not np.any(keep):
+        return None
+    dirs = pts[keep] / ranges[keep, None]
+    hit = (dirs @ unit) >= float(cos_min)
+    if not np.any(hit):
+        return None
+    return float(ranges[keep][hit].min())
+
+
+def fit_straight_rails(rails: list[RailSpec], points: np.ndarray) -> None:
+    """Shorten default straight rails to 80% of the free distance along their direction."""
+    for spec in rails:
+        if spec.orientation != "look_forward" or spec.label not in {row["label"] for row in D.STRAIGHT_RAILS}:
+            continue
+        direction = next(row["direction"] for row in D.STRAIGHT_RAILS if row["label"] == spec.label)
+        free = depth_along(points, np.asarray(direction, dtype=np.float64))
+        if free is None:
+            continue
+        length = min(D.STRAIGHT_RAIL_LENGTH, D.STRAIGHT_WALL_FRACTION * free)
+        if length < 0.2:
+            length = 0.2
+        spec.anchors = straight_anchors(direction, length)
+
+
+def rail_clips_wall(spec: RailSpec, points: np.ndarray) -> bool:
+    """True when a sampled knot path goes past the cloud in that direction. Warn only."""
+    try:
+        anchors, _targets = parse_anchors_ext(spec.anchors)
+    except ValueError:
+        return False
+    anchors = np.asarray(anchors, dtype=np.float64).copy()
+    anchors[0] = 0.0
+    samples = catmull_rom(anchors, 17)
+    for point in samples:
+        dist = float(np.linalg.norm(point))
+        if dist < 0.05:
+            continue
+        free = depth_along(points, point)
+        if free is not None and dist > free + 0.02:
+            return True
+    return False
+
+
 def smpl_rail(index: int) -> RailSpec:
     src = D.SMPL_RAILS[index]
     return RailSpec(
@@ -142,7 +219,7 @@ def smpl_rail(index: int) -> RailSpec:
 
 
 def default_rails() -> list[RailSpec]:
-    return [smpl_rail(i) for i in range(D.DEFAULT_RAIL_COUNT)]
+    return [straight_rail(i) for i in range(D.DEFAULT_RAIL_COUNT)]
 
 
 def next_free_rail_index(rails: list[RailSpec]) -> int | None:
@@ -224,27 +301,41 @@ def load_editor(scene: str) -> tuple[list[RailSpec], int, int] | None:
 
 
 def seed_rails_for_scene(scene: str) -> list[RailSpec]:
-    """Four SMPL knot sets. Keep a P2-edited rail 0 from confirmed.json / camplot.json."""
-    rails = default_rails()
+    """Four straight rails, shortened to the cloud. A saved confirmed set is kept."""
     root = scene_dir(scene)
-    old = None
     confirmed = confirmed_path(scene)
-    camplot = root / "control" / "camplot.json"
     if confirmed.is_file():
         data = json.loads(confirmed.read_text(encoding="utf-8"))
-        if isinstance(data.get("rails"), list) and data["rails"]:
-            old = data["rails"][0]
-        elif data.get("anchors"):
-            old = data
-    elif camplot.is_file():
-        old = json.loads(camplot.read_text(encoding="utf-8"))
-    if old and old.get("anchors"):
-        rails[0].anchors = str(old["anchors"])
-        rails[0].orientation = str(old.get("orientation") or rails[0].orientation)
-        rails[0].look_at = str(old.get("look_at") or rails[0].look_at)
-        rails[0].length = snap_length(int(old.get("length") or rails[0].length))
-        if rails[0].orientation != "look_at_target":
-            rails[0].label = ""
+        rows = data.get("rails")
+        if isinstance(rows, list) and rows:
+            rails: list[RailSpec] = []
+            seen: set[int] = set()
+            for i, row in enumerate(rows[: D.MAX_RAILS]):
+                idx = int(row.get("rail_index", row.get("index", i)))
+                if idx < 0 or idx >= D.MAX_RAILS or idx in seen:
+                    continue
+                seen.add(idx)
+                rails.append(
+                    RailSpec(
+                        index=idx,
+                        orientation=str(row.get("orientation") or D.LOOK_DEFAULT),
+                        anchors=str(row.get("anchors") or D.ANCHORS_DEFAULT),
+                        look_at=str(row.get("look_at") or D.LOOK_AT_DEFAULT),
+                        length=snap_length(int(row.get("length") or D.LENGTH_DEFAULT)),
+                        label=str(row.get("label") or ""),
+                        played=True,
+                        dirty=False,
+                    )
+                )
+            if rails:
+                rails.sort(key=lambda spec: spec.index)
+                return rails
+    rails = default_rails()
+    cloud = root / "moge" / "cloud.npz"
+    if cloud.is_file():
+        points = np.load(cloud)["points"]
+        if points.ndim == 2 and points.shape[0] >= 50:
+            fit_straight_rails(rails, points)
     return rails
 
 
@@ -301,12 +392,10 @@ def empty_dataset_row(index: int) -> dict:
     return {
         "index": int(index),
         "keep": True,
-        "wan": wan_video_rel(index),
         "mask": control_mask_rel(index),
         "video": control_video_rel(index),
         "rail": rail_json_rel(index),
         "status": "queued",
-        "hires": False,
     }
 
 
@@ -319,7 +408,7 @@ def load_dataset(scene: str) -> dict:
                 return data
         except json.JSONDecodeError:
             pass
-    return {"version": 1, "wan_confirmed": False, "rails": []}
+    return {"version": 1, "rails": []}
 
 
 def save_dataset(scene: str, data: dict) -> Path:
@@ -345,7 +434,6 @@ def sync_dataset_from_confirmed(scene: str) -> dict:
                 old = prev.get(idx) or {}
                 row["keep"] = bool(old.get("keep", True))
                 row["status"] = str(old.get("status") or "queued")
-                row["hires"] = bool(old.get("hires"))
                 if src.get("video"):
                     row["video"] = str(src["video"])
                 if src.get("mask"):
@@ -355,14 +443,6 @@ def sync_dataset_from_confirmed(scene: str) -> dict:
                 rows.append(row)
     if not rows:
         rows = [empty_dataset_row(i) for i in range(D.DEFAULT_RAIL_COUNT)]
-    root = scene_dir(scene)
-    for row in rows:
-        wan = root / str(row.get("wan") or wan_video_rel(int(row["index"])))
-        if wan.is_file() and wan.stat().st_size > 0:
-            if row.get("status") in ("queued", "failed", ""):
-                row["status"] = "wan"
-        elif row.get("status") == "wan":
-            row["status"] = "queued"
     data["version"] = 1
     data["rails"] = rows
     save_dataset(scene, data)

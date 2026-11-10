@@ -48,7 +48,7 @@ Geometry / Splat dummy JS: [rail-dummy.js](../docs/rail-dummy.js)
 - **Shell:** PySide6, Engineering Blueprint look from V1 (`theme.css` tokens)
 - **Quality GPU:** RTX 3090 24GB, CUDA device **0** unless the user picks another
 
-Happy path: **2D Images** (or 360 Images / text) → 8K ERP → Compute geometry → rails → Generate WAN (review 720p) → Confirm HiRes → SphereSfM (kept rails) → in-app LiteGS (**LiteGS** or **MCMC Compact** controller, Gaussian budget) → full-SH `splat.ply` → optional Open in Brush / LichtFeld / Postshot → UE 5.5 + MLSLabsRenderer.
+Happy path: **2D Images** (or 360 Images / text) → 8K ERP → Compute geometry → four straight rails → WorldStereo (up to six views per rail) → HiRes all (pinhole) → known-pose COLMAP → in-app LiteGS (**LiteGS** or **MCMC Compact** controller, Gaussian budget) → full-SH `splat.ply` → optional Open in Brush / LichtFeld / Postshot → UE 5.5 + MLSLabsRenderer.
 
 ## Shared window (every page)
 
@@ -64,7 +64,7 @@ Copied from [Index HTML copies](../docs/Votion_3DGS_2.0_Index.md#html-copies-dum
 
 ## What is not in 2.0
 
-Do not re-open: slice+SHARP, UniSHARP, the HY-World 2.0 stack (two models, four GPUs), NVIDIA Lyra, Marble, WorldFM/HunyuanWorld, PanoLRM, SeedVR as the sharpness path, ComfyUI UI, WSL. The one exception is the standalone WorldStereo memory-DMD model, one GPU, Index certainty log #58–#60 (2026-10-29). It is an experimental Quality generator, off by default.
+Do not re-open: slice+SHARP, UniSHARP, the HY-World 2.0 stack (two models, four GPUs), NVIDIA Lyra, Marble, WorldFM/HunyuanWorld, PanoLRM, SeedVR as the sharpness path, ComfyUI UI, WSL. WorldStereo memory-DMD is the Quality generator (Index #61, 2026-10-30). The WAN 14B generator, ERP HiRes, and SphereSfM are removed. Fast and Scout stay disabled.
 
 P5 stretch only (not a 2.0 blocker): SeedVR2 experiment, Matrix-3D opt recon, macOS. Matrix-3D 5B as Fast default is a **2.0** lock.
 
@@ -77,7 +77,7 @@ P5 stretch only (not a 2.0 blocker): SeedVR2 experiment, Matrix-3D opt recon, ma
 - Timeline: **no calendar dates** — phase order is the schedule
 - Success: **phase acceptance checklists only** (no extra KPIs)
 - HiRes coverage: **log only**, not a ship gate
-- Fast default WAN: **Matrix-3D 5B** (locked 2026-09-01). GGUF Q4 is not the Fast default. Exact 5B filename: copy from Matrix-3D README at implement — do not invent.
+- Fast and Scout stay disabled. Do not invent a model name for them.
 - Geometry viewport: **QPainter** plates + gizmos (locked 2026-09-03). Do not ship QWebEngine. vispy is not the Geometry editor.
 - Generate / Reconstruct P3 (locked 2026-09-04): dummy PNG HTML-only; live mask|WAN; click rails; two-stage WAN then HiRes; Keep/Ditch/Re-gen; newest sparse after Reconstruct.
 - Splat viewport P2 (locked 2026-09-05): live raster; uncapped max steps; Star camera LMB/RMB/wheel; Stop; MCMC Compact = LiteGS Gaussians; needle takeover / crushed tones are bugs.
