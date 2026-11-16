@@ -71,6 +71,8 @@ Human persona job titles: UNKNOWN. Audience: small private team (locked). Hardwa
 
 - As a user I can switch **2D Images / 360 Images / text** without leaving the Panorama page.
 - As a user I can **type or drag** **h_fov** (default **70**, range **10–170**, step **0.5**) and see the green FOV window change live.
+- As a user I can press **Detect** to fill h_fov from the photo's lens EXIF. A cropped photo, or one with no lens tags, uses a MoGe guess and says so. Locked 2026-11-11.
+- As a user, after a 2D Images Generate, I see the original photo pasted back inside the h_fov footprint, with a feathered seam. Locked 2026-11-11.
 - As a user I can **Fit** the full 2:1 in the pane or view **100%** native pixels with 2D slide, and drag the split vs the 360 look.
 - As a user I can edit IMAGE→PANO seed `12345`, IMAGE seam seed `12345`, TEXT→PANO seed `322344328372862`, TEXT seam seed `8`, and the upscaler prompt (default `High resolution photography`).
 - As a user I can read graph how-to in the Help drawer.
@@ -139,6 +141,7 @@ Full node list: [Phase1.md §2D Images](../docs/Votion_3DGS_2.0_Phase1.md). Summ
   → Put original 2D image back
   → roll 50% → SEAM INPAINT node 63 → roll back
   → shared 8K tail
+  → paste the original photo back (2D Images only, feathered seam)
 ```
 
 **Outpaint instruction (leave as-is):**
@@ -148,6 +151,10 @@ Full node list: [Phase1.md §2D Images](../docs/Votion_3DGS_2.0_Phase1.md). Summ
 Graph demo surroundings `Professional photography of living room.` is **demo content**, not a silent default. Always append **`no peoples, no cars`**.
 
 After successful 2D Generate: `prompt.txt` = outpaint instruction + space + surroundings (with suffix).
+
+**Photo paste (2026-11-11):** `engine/pano/photo_paste.py` runs after the 8K tail on 2D Images only. It warps the source photo with the same `persp_to_erp` placement as generation and blends a 128 px cosine feather through a 5-level Laplacian pyramid. The pre-paste file is `outputs/<scene>/_work/pano_before_paste.png`. 360 Images and text clear it.
+
+**Detect (2026-11-11):** `engine/workers/detect_fov.py`. EXIF focal length is used when the pixel shape matches the EXIF pixel size. Otherwise MoGe v1 estimates the field of view. That guess can be about 10° off on a straight-on facade.
 
 **Ostris pack pin in graph:** [ostris/ComfyUI-Krea2-Ostris-Edit](https://github.com/ostris/ComfyUI-Krea2-Ostris-Edit) `7756566160c4a1b24bb1bd9f0ff3ced1a83d7547`. Native port **READY** (2026-09-03). Do not shell out to ComfyUI.
 
@@ -177,8 +184,9 @@ If UltimateSDUpscale cannot be ported: that is a **Quality blocker**. Do **not**
 
 ### 4.6 Workers
 
-- `engine.workers.pano` — one process, then exit (VRAM back before Phase 2 MoGe)
+- `engine.workers.pano` — one process, then exit (VRAM back before Phase 2 MoGe). 2D Images pastes the photo after the 8K tail.
 - `engine.workers.caption` — Florence-2 only fills the surroundings box
+- `engine.workers.detect_fov` — fills h_fov from EXIF, else MoGe v1. Qt does not import it.
 
 Florence-2: Microsoft Florence-2 family, Apache-2.0. Hub (first successful P1 caption): `florence-community/Florence-2-large` rev `4271c66b88cdbc05735372ec13b2360108de5317`. Use a short caption task (one sentence). Always append **`no peoples, no cars`**. Dummy Caption paste (HTML only): `[Florence-2] edit this sentence before Generate, no peoples, no cars`.
 
@@ -193,7 +201,8 @@ Florence-2: Microsoft Florence-2 family, Apache-2.0. Hub (first successful P1 ca
 - [ ] Typed surroundings also end with `no peoples, no cars` in `prompt.txt`.
 - [ ] Left 2:1 **Fit / 100%** and a draggable split; right 360 tilts and looks spherical.
 - [ ] After Generate, switching chips away and back still shows the 8K ERP (not the green warp).
-- [ ] **h_fov** accepts a typed value as well as the slider (10–170, step 0.5).
+- [ ] **h_fov** accepts a typed value as well as the slider (10–170, step 0.5). **Detect** fills it from EXIF, or from MoGe when EXIF is missing or the photo was cropped.
+- [ ] **2D Images:** after the 8K tail, the original photo is pasted back with a feathered seam. Pixels outside that footprint stay the generated panorama.
 - [ ] **2D Images** and **text:** final size **measured** (expect 8192×4096) and recorded in `env_report` / scene log.
 - [ ] Same 8K file is what Phase 3 HiRes uses as geometry pano **and** texture.
 

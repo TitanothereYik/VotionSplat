@@ -75,10 +75,13 @@
               <div class="f-drop"><img src="media/matrix3d-i2p.png" alt="Example 2D still" /></div>
               <div class="hfov-row">
                 <label class="f-lab">h_fov</label>
-                <input class="f-in hfov-num" id="hfov-val" type="number" min="10" max="170" step="0.5" value="70" />
+                <span style="display:flex;gap:0.35rem;align-items:center">
+                  <input class="f-in hfov-num" id="hfov-val" type="number" min="10" max="170" step="0.5" value="70" />
+                  <button class="f-btn" type="button">Detect</button>
+                </span>
               </div>
               <input class="f-range" id="hfov" type="range" min="10" max="170" step="0.5" value="70" />
-              <p class="f-hint">Type or drag. <code>MickmumpitzPanoWarp</code> INPUT_TYPES <code>10–170</code>, step <code>0.5</code>. Default 70.</p>
+              <p class="f-hint">Type or drag. <code>MickmumpitzPanoWarp</code> INPUT_TYPES <code>10–170</code>, step <code>0.5</code>. Default 70. <strong>Detect</strong> reads the lens EXIF, or a MoGe guess when the photo has no lens tags or was cropped.</p>
               <label class="f-lab">Surroundings</label>
               <div class="f-radio" id="surr-radios">
                 <label><input type="radio" name="surr" value="type" checked /> Type a sentence</label>
@@ -105,9 +108,9 @@
             <div class="pane" id="pane-360">
               <label class="f-lab">360 file (2:1 only)</label>
               <div class="f-drop">Drop ERP · reject non-2:1 · do not letterbox</div>
-              <label class="f-lab">prompt.txt (WAN later)</label>
+              <label class="f-lab">prompt.txt</label>
               <textarea class="f-ta" readonly>alpine village, mill, pond</textarea>
-              <p class="f-hint">Empty OK in P1. Phase 3 blocks WAN if empty. Store as-is even if not 8192. Quality HiRes refuses other widths unless you Upscale to 8K.</p>
+              <p class="f-hint">Empty is allowed here. Generate blocks an empty prompt. Store the file as-is even if it is not 8192 wide. Quality HiRes refuses other widths unless you Upscale to 8K.</p>
               <label class="f-lab">Upscaler prompt</label>
               <input class="f-in" value="High resolution photography" readonly />
               <div class="f-row">
@@ -122,7 +125,7 @@
               <span class="f-prefix">img-txt-2-360 A full 360 degree equirectangular panorama in 2:1 spherical projection,</span>
               <textarea class="f-ta" readonly>alpine village with a mill and a small pond</textarea>
               <p class="f-hint">User sentence after the comma. Empty scene → block Generate. No 2D image in this mode. After Generate, <code>prompt.txt</code> = locked prefix + sentence.</p>
-              <label class="f-lab">prompt.txt (WAN later)</label>
+              <label class="f-lab">prompt.txt</label>
               <textarea class="f-ta" readonly>img-txt-2-360 A full 360 degree equirectangular panorama in 2:1 spherical projection, alpine village with a mill and a small pond</textarea>
               <label class="f-lab">Seed (TEXT→PANO)</label>
               <input class="f-in" value="322344328372862" readonly />
@@ -191,7 +194,7 @@
       <div class="mode-grid">
         <figure class="fig">
           <img src="media/matrix3d-i2p.png" alt="Single 2D photo as the start of a 3D scene" />
-          <figcaption><strong>2D Images</strong> (default). <a href="https://github.com/SkyworkAI/Matrix-3D">Matrix-3D</a></figcaption>
+          <figcaption><strong>2D Images</strong> (default). Krea outpaint, then the original photo is pasted back.</figcaption>
         </figure>
         <figure class="fig erp">
           <img src="media/polyhaven-venice.png" alt="Equirectangular 360 HDRI" />
@@ -273,6 +276,7 @@
       <p>
         UltimateSDUpscale node 77 widgets copied as-is. If unportable: MVP = Real-ESRGAN 2× + lanczos and <strong>label</strong> the mismatch.
         Upscaler prompt is a visible box, default <code>High resolution photography</code>, user may edit.
+        On 2D Images, after this tail, the original photo is pasted back inside the h_fov footprint with a feathered seam (2026-11-11). 360 Images and text do not paste.
       </p>
     </section>
 
@@ -286,7 +290,8 @@
         <li>Original 2D region recognizable; outpaint string unchanged; seam not a visible cut.</li>
         <li>Florence-2 fills the surroundings box and appends <code>no peoples, no cars</code>; user can edit; empty manual box blocks Generate.</li>
         <li>Left 2:1 <strong>Fit / 100%</strong> and a draggable split; right 360 tilts and looks spherical.</li>
-        <li><strong>h_fov</strong> accepts a typed value as well as the slider (10–170, step 0.5).</li>
+        <li><strong>h_fov</strong> accepts a typed value as well as the slider (10–170, step 0.5). <strong>Detect</strong> fills it from EXIF, or from MoGe when EXIF is missing or the photo was cropped.</li>
+        <li><strong>2D Images:</strong> after the 8K tail, the original photo is pasted back with a feathered seam. Pixels outside that footprint stay the generated panorama.</li>
         <li><strong>2D Images</strong> and <strong>text:</strong> final size measured (expect 8192×4096).</li>
       </ul>
       <p>Do not shell out to ComfyUI. Do not invent Warp names or strip the trigger / outpaint strings / <code>no peoples, no cars</code>. Do not generate at 8K natively in Krea. Do not skip seam roll.</p>

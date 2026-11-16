@@ -66,12 +66,14 @@ CONFIG_SUBFOLDER = "worldstereo-memory-dmd"
 DINO_REPO = "facebook/dinov2-base"
 
 HELP_GENERATE = """GENERATE
-WorldStereo 2.0 is the Quality generator. One process, one memory bank.
+WorldStereo 2.0 is the Quality generator. One process, one memory bank. Retrieval uses the HY-World far plane, eight times the MoGe depth median.
 Joint is the default. Each kept rail gets 20 frames, and each rail is its own sample so the 24 GB card can hold it. The next rail starts on the previous sample's last frame and retrieves the shared memory bank. The camera goes out along one rail and back along the next, starting at the star.
 Per rail is the other option. Each kept rail gets its own 21-frame front view. Re-gen selected rail restores memory from the previous rail, then marks later rails stale.
-Generate resumes. Start over clears rails and memory after you confirm.
+Generate resumes. Start over closes the open preview, then clears rails, memory, the depth cache, and the geometry cache after you confirm.
 The keyframe chips show the selected rail, or the whole Joint sequence.
-HiRes all upscales every WorldStereo keyframe with 4x-UltraSharp. It does not reproject the panorama.
+The guide video is a solid surface built from the 8K panorama's depth, so straight lines stay straight.
+After each rail, the gaps WorldStereo filled are saved into a shared layer, and later rails see them in their guide.
+HiRes has two choices. Composite paints the 8K panorama where the mesh is visible, and the WorldStereo frame fills the holes. WorldStereo upscales the generated frames and does not paint the panorama. HiRes all writes the selected choice. Reconstruct uses whichever set is active.
 An empty prompt blocks Generate. Confirm rails on Geometry first.
 """
 

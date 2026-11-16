@@ -35,6 +35,12 @@ from PySide6.QtWidgets import (
 )
 
 from app.widgets.splat_view import SplatLiveView
+from engine.hires.pinhole import (
+    active_choice,
+    choice_matches_dataset,
+    choice_name,
+    dataset_images,
+)
 from engine.pano.scene_io import scene_dir
 from engine.sfm.dataset_source import colmap_root, output_root
 from engine.splat import defaults as D
@@ -324,12 +330,12 @@ class SplatPage(QWidget):
         self.drop_sh = QCheckBox("Compact export drops f_rest bands (DC only)")
         r.addWidget(self.drop_sh)
 
-        self.btn_colmap = QPushButton("Open COLMAP folder")
+        self.btn_colmap = QPushButton("Open dataset folder")
         self.btn_colmap.setObjectName("btnGhost")
         self.btn_colmap.clicked.connect(self._open_colmap)
         r.addWidget(self.btn_colmap)
 
-        r.addWidget(_hint("If the LiteGS spike failed: Train disabled; Open COLMAP folder still works (Brush)."))
+        r.addWidget(_hint("If the LiteGS spike failed: Train disabled. Open dataset folder still works for Brush."))
         self.gate_hint = _hint("")
         r.addWidget(self.gate_hint)
         r.addStretch(1)
@@ -705,36 +711,55 @@ class SplatPage(QWidget):
         ck_strat = str(meta.get("controller") or meta.get("strategy") or "")
         same = bool(ck_strat) and ck_strat == self.strategy_label() and not legacy
         ply = (train_root / "splat.ply").is_file()
-        can_train = colmap_ok and spike_ok
+        choice = active_choice(root)
+        images = dataset_images(root)
+        aligned = colmap_ok and choice_matches_dataset(choice, images)
+        trained_on = str(meta.get("images") or "")
+        recorded = "images" in meta
+        same_images = recorded and trained_on == images
+        can_train = colmap_ok and spike_ok and aligned
         busy = self._worker_kind == "train"
-        self.btn_train.setEnabled(can_train and not busy)
+        resume_ok = (not ck_strat) or same_images
+        self.btn_train.setEnabled(can_train and resume_ok and not busy)
         self.btn_retrain.setEnabled(can_train and not busy)
-        self.btn_continue.setEnabled(can_train and same and not busy and not bool(meta.get("done")))
+        self.btn_continue.setEnabled(
+            can_train and same and same_images and not busy and not bool(meta.get("done"))
+        )
         self.btn_export.setEnabled(colmap_ok and (ply or same) and not busy)
         self.btn_export_compact.setEnabled(colmap_ok and same and not busy)
         self.color_space.setEnabled(colmap_ok and (ply or same) and not busy)
         self.drop_sh.setEnabled(colmap_ok and same and not busy)
         steps = self._steps()
+        path = choice_name(choice)
+        built = "WorldStereo" if images == "frame" else "Composite" if images == "composite" else ""
         if not colmap_ok:
-            self.gate_hint.setText("Reconstruct first — Train needs worldstereo/dataset.")
+            self.gate_hint.setText(f"Reconstruct first — Train needs the {path} dataset.")
+        elif not aligned:
+            was = built or "an older reconstruct"
+            self.gate_hint.setText(
+                f"Generate is {path}. This dataset is {was}. Reconstruct again before Train."
+            )
         elif not spike_ok:
             self.gate_hint.setText(
                 "LiteGS spike not OK — Train disabled. Home → Build LiteGS. "
-                "Open COLMAP folder still works (Brush). " + litegs_spike_detail()
+                "Open dataset folder still works for Brush. " + litegs_spike_detail()
             )
         elif legacy:
             self.gate_hint.setText("Checkpoint is from the old gsplat trainer (params only) — Retrain required.")
         elif ck_strat and not same:
             self.gate_hint.setText(f"Checkpoint is {ck_strat}. Continue stays off until Retrain as {self.strategy_label()}.")
+        elif ck_strat and not same_images:
+            self.gate_hint.setText(f"This splat was not trained on {path}. Retrain before continuing.")
         elif meta.get("done"):
             self.gate_hint.setText(
-                f"{ck_strat} finished at step {meta.get('step')} · N={meta.get('gaussians')}"
+                f"{path} · {ck_strat} finished at step {meta.get('step')} · N={meta.get('gaussians')}"
                 + (f" · eval PSNR {meta.get('psnr_eval')}" if meta.get("psnr_eval") else "")
                 + ". Raise Max steps and Continue, or Retrain."
             )
         else:
-            note = " Writes worldstereo/train. WAN splat.ply stays." if known else ""
-            self.gate_hint.setText(f"{self.strategy_label()} · max {steps} · budget {self._budget():,}.{note}")
+            self.gate_hint.setText(
+                f"{self.strategy_label()} · {path} · max {steps} · budget {self._budget():,}."
+            )
         if meta.get("step") and not busy:
             self._stats["step"] = str(int(meta["step"]))
             self._stats["max"] = str(int(meta.get("max_steps") or steps))
@@ -756,6 +781,6 @@ class SplatPage(QWidget):
         if ply and not busy:
             self.view_hint.setText(
                 "Reset is the rails Star. LMB look · RMB pan · wheel dolly (uncapped) · "
-                "hold LMB + WASD/QE to fly.  " + str(root / "splat.ply")
+                "hold LMB + WASD/QE to fly.  " + str(train_root / "splat.ply")
             )
         self._update_hud()

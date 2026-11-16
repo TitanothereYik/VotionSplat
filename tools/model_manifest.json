@@ -136,7 +136,9 @@
       "url": "https://huggingface.co/apozz/WorldStereo-fp8/resolve/main/WorldStereo-memory-dmd-fp8_e4m3fn_scaled.safetensors",
       "public": true,
       "expected_bytes": 20356086900,
-      "sets": ["all"]
+      "sets": [
+        "all"
+      ]
     },
     {
       "id": "dinov2",
@@ -148,7 +150,9 @@
       "url": "https://huggingface.co/facebook/dinov2-base/resolve/main/model.safetensors",
       "public": true,
       "expected_bytes": 346345912,
-      "sets": ["all"]
+      "sets": [
+        "all"
+      ]
     },
     {
       "id": "worldstereo_config",
@@ -161,7 +165,9 @@
       "url": "https://huggingface.co/hanshanxue/WorldStereo/resolve/main/worldstereo-memory-dmd/config.json",
       "public": true,
       "expected_bytes": 3452,
-      "sets": ["all"]
+      "sets": [
+        "all"
+      ]
     },
     {
       "id": "wan480_config",
@@ -174,7 +180,9 @@
       "url": "https://huggingface.co/Wan-AI/Wan2.1-I2V-14B-480P-Diffusers/resolve/main/transformer/config.json",
       "public": true,
       "expected_bytes": 466,
-      "sets": ["all"]
+      "sets": [
+        "all"
+      ]
     },
     {
       "id": "moge",

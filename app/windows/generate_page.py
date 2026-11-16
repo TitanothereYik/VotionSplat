@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import gc
 import json
 import shutil
+import time
 from pathlib import Path
 
 import cv2
@@ -29,7 +31,15 @@ from PySide6.QtWidgets import (
 
 from app.widgets.erp_view import ErpStill
 from engine.geo.rails import sync_dataset_from_confirmed
-from engine.hires.pinhole import HIRES_SOURCE
+from engine.hires.pinhole import (
+    HIRES_COMPOSITE,
+    HIRES_FRAME,
+    active_choice,
+    hires_dir_for,
+    hires_ready,
+    write_choice,
+    use_hires,
+)
 from engine.job import REPO_ROOT
 from engine.pano.defaults import wan_prompt_from_stored
 from engine.pano.scene_io import prompt_path, scene_dir, wan_prompt_path
@@ -50,6 +60,22 @@ def _hint(text: str) -> QLabel:
     return lab
 
 
+def _remove_tree(path: Path) -> str | None:
+    """Delete a cache folder. Retry briefly: Windows keeps a video locked until the capture is gone."""
+    if not path.exists():
+        return None
+    last = "busy"
+    for _ in range(8):
+        try:
+            shutil.rmtree(path)
+            return None
+        except OSError as exc:
+            last = str(exc)
+            gc.collect()
+            time.sleep(0.05)
+    return f"{path.name}: {last}"
+
+
 def _ws_weights_ready() -> bool:
     weights = REPO_ROOT / "models" / "diffusion_models" / WS.FP8_FILE
     dino = REPO_ROOT / "models" / "dinov2-base" / "model.safetensors"
@@ -65,10 +91,20 @@ class GeneratePage(QWidget):
     requestJob = Signal(list)
     requestStop = Signal()
 
-    def __init__(self, scene_name_fn, rails_ready_fn, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        scene_name_fn,
+        rails_ready_fn,
+        parent: QWidget | None = None,
+        *,
+        release_media=None,
+        after_clear=None,
+    ) -> None:
         super().__init__(parent)
         self._scene_name = scene_name_fn
         self._rails_ready = rails_ready_fn
+        self._release_media = release_media
+        self._after_clear = after_clear
         self._loading_prompt = False
         self._busy = False
         self._job_kind = ""
@@ -164,6 +200,20 @@ class GeneratePage(QWidget):
         self.btn_regen.setObjectName("btnGhost")
         self.btn_regen.clicked.connect(self._on_regen_selected)
         r.addWidget(self.btn_regen)
+
+        r.addWidget(_lab("HiRes"))
+        self.hires_mode = QComboBox()
+        self.hires_mode.addItem("Composite", HIRES_COMPOSITE)
+        self.hires_mode.addItem("WorldStereo", HIRES_FRAME)
+        self.hires_mode.setToolTip(
+            "Composite paints the 8K panorama where the mesh is visible. "
+            "WorldStereo upscales the generated frames and does not paint the panorama. "
+            "HiRes all writes the selected one. Reconstruct uses whichever is active."
+        )
+        self.hires_mode.currentIndexChanged.connect(self._on_hires_mode)
+        r.addWidget(self.hires_mode)
+        self.hires_hint = _hint("")
+        r.addWidget(self.hires_hint)
 
         self.btn_hires = QPushButton("HiRes all")
         self.btn_hires.setObjectName("btnGhost")
@@ -264,7 +314,7 @@ class GeneratePage(QWidget):
         v.addWidget(
             _hint(
                 "Rail shows the selected rail. Joint plays the whole sample. "
-                "Generate resumes. Start over clears rails and memory."
+                "Generate resumes. Start over closes the preview, then clears rails, memory, and the geometry cache."
             )
         )
         self._view_chips["rail"].setChecked(True)
@@ -357,10 +407,23 @@ class GeneratePage(QWidget):
             return False
         return all((frames / name).is_file() for name in self._expected_names(folder))
 
+    def _preview_ready(self, rail_index: int, view: str) -> bool:
+        folder = self.rail_view_dir(rail_index, view)
+        return (folder / "render" / "render.mp4").is_file() and (folder / "mask" / "render_mask.mp4").is_file()
+
+    def _guide_preview_only(self) -> bool:
+        folder = scene_dir(self._scene_name()) / "worldstereo" / "joint"
+        keyframes = folder / "keyframes"
+        has_frames = keyframes.is_dir() and any(keyframes.glob("[0-9][0-9][0-9].png"))
+        return self._gen_mode() == "joint" and self._preview_ready(0, "joint") and not has_frames
+
     def _sync_view_chips(self) -> None:
         rail = self._view_rail
         for name, chip in self._view_chips.items():
-            ready = rail >= 0 and self._view_ready(rail, name) if name == "rail" else self._view_ready(0, "joint")
+            if name == "rail":
+                ready = rail >= 0 and (self._view_ready(rail, name) or self._preview_ready(rail, name))
+            else:
+                ready = self._view_ready(0, "joint") or self._preview_ready(0, "joint")
             live = self._busy and self._job_view == name
             chip.setEnabled(ready or live or name == self._active_view)
 
@@ -430,7 +493,18 @@ class GeneratePage(QWidget):
         )
         self.btn_restart.setEnabled(not self._busy)
         self.btn_hires.setEnabled(can_job and self._any_view_ready())
-        self.btn_hires.setToolTip("Upscale every WorldStereo keyframe. The panorama is not reprojected.")
+        self.hires_mode.setEnabled(not self._busy)
+        selected = str(self.hires_mode.currentData() or HIRES_COMPOSITE)
+        if selected == HIRES_FRAME:
+            self.btn_hires.setToolTip("Upscale the WorldStereo frames. Reconstruct uses those images.")
+        else:
+            self.btn_hires.setToolTip("Paint the 8K panorama where the mesh is visible. Reconstruct uses those images.")
+        if self._hires_missing():
+            self.hires_hint.setText("HiRes all builds this choice. Reconstruct keeps the other set until then.")
+        elif selected == HIRES_FRAME:
+            self.hires_hint.setText("Reconstruct uses the upscaled WorldStereo frames.")
+        else:
+            self.hires_hint.setText("Reconstruct uses the panorama composite.")
         if self._busy:
             self.gate_hint.setText("WorldStereo running — one process, shared memory. Stop frees the GPU.")
         elif empty:
@@ -444,11 +518,11 @@ class GeneratePage(QWidget):
         elif joint:
             self.gate_hint.setText(
                 "Joint covers every kept rail, one sample per rail, and the next sample continues from the shared memory. "
-                "Generate resumes a matching run. Start over clears rails and memory."
+                "Generate resumes a matching run. Start over closes the preview, then clears rails, memory, and the geometry cache."
             )
         else:
             self.gate_hint.setText(
-                "Per rail generates a 21-frame front view. Generate resumes. Start over clears rails and memory."
+                "Per rail generates a 21-frame front view. Generate resumes. Start over closes the preview, then clears rails, memory, and the geometry cache."
             )
         self._sync_view_chips()
 
@@ -460,7 +534,15 @@ class GeneratePage(QWidget):
         self._loading_prompt = False
         self._fill_rail_rows()
         self._sync_ws_order()
+        self._load_hires_choice()
         self._sync_buttons()
+        if not self._busy and not keep_preview and self._guide_preview_only():
+            self._active_view = "joint"
+            chip = self._view_chips.get("joint")
+            if chip is not None:
+                chip.setChecked(True)
+            self._show_ws_preview(0, "joint")
+            return
         if keep_preview and self._view_rail >= 0:
             self._show_ws_preview(self._view_rail, self._active_view)
         elif not self._busy:
@@ -560,17 +642,18 @@ class GeneratePage(QWidget):
                 self._frame_positions = [int(pos) for pos in positions]
         self._stop_preview_play()
         self._kf_dir = keyframes if keyframes.is_dir() else None
-        hires_dir = rail_dir / "hires"
-        stamp = hires_dir / "source.txt"
-        use_hires = (
-            self._kf_dir is not None
-            and stamp.is_file()
-            and stamp.read_text(encoding="utf-8").strip() == HIRES_SOURCE
-        )
-        self._hires_dir = hires_dir if use_hires else None
-        if use_hires:
+        choice = active_choice(scene_dir(self._scene_name()))
+        shown = hires_dir_for(rail_dir, choice)
+        self._hires_dir = shown if self._kf_dir is not None else None
+        if self._hires_dir is not None:
             self.preview_lab.setText("Live preview · render | mask | HiRes")
-            self.legend.setText("Render · mask (white = empty) · HiRes of the WorldStereo frame")
+            if choice == HIRES_FRAME:
+                self.legend.setText("Render · mask (white = empty) · HiRes (upscaled WorldStereo)")
+            else:
+                self.legend.setText("Render · mask (white = empty) · HiRes (8K pano, WorldStereo in the holes)")
+        elif self._kf_dir is None:
+            self.preview_lab.setText("Live preview · guide | mask")
+            self.legend.setText("Guide · mask (white = empty)")
         else:
             self.preview_lab.setText("Live preview · render | mask | keyframe")
             self.legend.setText("Render · mask (white = empty) · keyframe")
@@ -779,17 +862,30 @@ class GeneratePage(QWidget):
         answer = QMessageBox.question(
             self,
             "Start over",
-            "Clear WorldStereo rails, the joint sample, and memory for this scene?",
+            "Close the open preview, then clear WorldStereo output, the depth cache, "
+            "and the geometry cache for this scene? Floor, side, and the flight video "
+            "are removed. The panorama and your rails stay.",
         )
         if answer != QMessageBox.StandardButton.Yes:
             return
-        root = scene_dir(self._scene_name()) / "worldstereo"
-        for name in ("rails", "memory", "joint", "input"):
-            folder = root / name
-            if folder.is_dir():
-                shutil.rmtree(folder)
         self._stop_preview_play()
+        self.render_view.set_pil(None)
+        self.mask_view.set_pil(None)
+        self.frame_view.set_pil(None)
+        if self._release_media is not None:
+            self._release_media()
+        gc.collect()
+        scene = scene_dir(self._scene_name())
+        folders = [scene / "worldstereo" / name for name in ("rails", "memory", "joint", "input", "world")]
+        folders.extend((scene / "moge", scene / "control", scene / "depth"))
+        errors = [msg for msg in (_remove_tree(folder) for folder in folders) if msg]
+        if self._after_clear is not None:
+            self._after_clear()
         self.refresh()
+        if errors:
+            self.requestJob.emit(
+                ["__gen_error__", "Start over could not remove " + "; ".join(errors)]
+            )
 
     def _on_regen_selected(self) -> None:
         if self._gen_mode() == "joint":
@@ -800,9 +896,49 @@ class GeneratePage(QWidget):
             return
         self._emit_worldstereo(self._ws_order, restart=False, regen_rail=self._view_rail)
 
+    def _load_hires_choice(self) -> None:
+        root = scene_dir(self._scene_name())
+        saved = active_choice(root)
+        index = self.hires_mode.findData(saved)
+        if index >= 0 and index != self.hires_mode.currentIndex():
+            self.hires_mode.blockSignals(True)
+            self.hires_mode.setCurrentIndex(index)
+            self.hires_mode.blockSignals(False)
+        for rail in self._ws_order:
+            folder = self.rail_view_dir(rail, "front")
+            frames = folder / "keyframes"
+            count = len(list(frames.glob("[0-9][0-9][0-9].png"))) if frames.is_dir() else 0
+            if count and hires_ready(folder, saved, count):
+                use_hires(folder, saved)
+
+    def _hires_missing(self) -> bool:
+        source = str(self.hires_mode.currentData() or HIRES_COMPOSITE)
+        for index in self._ws_order:
+            folder = self.rail_view_dir(index, "front")
+            frames = folder / "keyframes"
+            count = len(list(frames.glob("[0-9][0-9][0-9].png"))) if frames.is_dir() else 0
+            if count and not hires_ready(folder, source, count):
+                return True
+        return False
+
+    def _on_hires_mode(self) -> None:
+        source = str(self.hires_mode.currentData() or HIRES_COMPOSITE)
+        write_choice(scene_dir(self._scene_name()), source)
+        switched = False
+        for index in self._ws_order:
+            folder = self.rail_view_dir(index, "front")
+            frames = folder / "keyframes"
+            count = len(list(frames.glob("[0-9][0-9][0-9].png"))) if frames.is_dir() else 0
+            if count and hires_ready(folder, source, count) and use_hires(folder, source):
+                switched = True
+        self._sync_buttons()
+        if switched and self._view_rail >= 0:
+            self._show_ws_preview(self._view_rail, self._active_view)
+
     def _on_hires(self) -> None:
         if not self._any_view_ready():
             self.requestJob.emit(["__gen_error__", "Generate keyframes before HiRes all"])
             return
-        self.requestJob.emit(["__ws_hires__", self._scene_name()])
+        source = str(self.hires_mode.currentData() or HIRES_COMPOSITE)
+        self.requestJob.emit(["__ws_hires__", self._scene_name(), source])
 

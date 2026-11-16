@@ -1,7 +1,7 @@
 """Turn a Votion scene into the WorldStereo memory-DMD input tree.
 
 The vendored loader (``load_mutli_traj_dataset``, ``sort_trajs``,
-``SimpleMemoryBank``) reads ``pano_bank/`` and ``view*/traj*/`` at the scene
+``HyMemoryBank``) reads ``pano_bank/`` and ``view*/traj*/`` at the scene
 root. The README draws those same files under ``render_results/``. This writer
 follows the loader, because that is what retrieval and sampling open.
 
@@ -17,6 +17,7 @@ cuts of the 8K pano use the pin's 27 origin cameras.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -42,7 +43,6 @@ PIN_BANK = (
     / "pano_bank"
     / "cameras.json"
 )
-MOGE_CANVAS = (2048, 1024)
 # Plot Camera's MoGe canvas. One sample per pixel; the DiT is not loaded yet.
 POINT_STRIDE = 1
 
@@ -141,6 +141,24 @@ def erp_points(depth: np.ndarray, rgb: np.ndarray) -> tuple[np.ndarray, np.ndarr
     return points, colors
 
 
+def _read_mp4(path: Path) -> list[np.ndarray]:
+    cap = cv2.VideoCapture(str(path))
+    if not cap.isOpened():
+        raise RuntimeError(f"failed to open {path}")
+    frames: list[np.ndarray] = []
+    try:
+        while True:
+            ok, frame = cap.read()
+            if not ok:
+                break
+            frames.append(frame)
+    finally:
+        cap.release()
+    if not frames:
+        raise RuntimeError(f"{path} has no frames")
+    return frames
+
+
 def _write_mp4(frames_bgr: list[np.ndarray], path: Path, fps: int = 16) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     height, width = frames_bgr[0].shape[:2]
@@ -150,6 +168,70 @@ def _write_mp4(frames_bgr: list[np.ndarray], path: Path, fps: int = 16) -> None:
     for frame in frames_bgr:
         writer.write(frame)
     writer.release()
+
+
+def _replace_mp4(frames_bgr: list[np.ndarray], path: Path) -> None:
+    """Write aside, then replace. A pane that still has the mp4 open keeps the previous file."""
+    if not frames_bgr:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.stem + "_next.mp4")
+    _write_mp4(frames_bgr, tmp)
+    try:
+        os.replace(tmp, path)
+    except OSError as exc:
+        print(f"STATUS // preview busy {path.name}: {exc}", flush=True)
+
+
+def publish_guide_preview(scene: str) -> None:
+    """Copy the joint guide into the render and mask panes.
+
+    The guide is written under ``input/joint_cNN/traj0``. The Generate page
+    plays ``worldstereo/joint`` and ``worldstereo/rails/rail_NN/front``.
+    """
+    plan_path = input_root(scene) / "joint_plan.json"
+    if not plan_path.is_file():
+        return
+    manifest = json.loads(plan_path.read_text(encoding="utf-8"))
+    if not isinstance(manifest, list) or not manifest:
+        return
+    root = scene_dir(scene)
+    joint_colors: list[np.ndarray] = []
+    joint_masks: list[np.ndarray] = []
+    by_rail: dict[int, list[tuple[int, np.ndarray, np.ndarray]]] = {}
+    for item in manifest:
+        if not isinstance(item, dict):
+            continue
+        frames = item.get("frames")
+        if not isinstance(frames, list) or not frames:
+            continue
+        anchor = int(item.get("anchor") or 0)
+        view_id = str(item.get("view_id") or "")
+        traj = input_root(scene) / view_id / "traj0"
+        colors = _read_mp4(traj / "render.mp4")
+        masks = _read_mp4(traj / "render_mask.mp4")
+        need = anchor + len(frames)
+        if len(colors) < need or len(masks) < need:
+            raise RuntimeError(f"{view_id} guide has {len(colors)} frames, need {need}")
+        colors = colors[anchor:need]
+        masks = masks[anchor:need]
+        joint_colors.extend(colors)
+        joint_masks.extend(masks)
+        for offset, row in enumerate(frames):
+            if not isinstance(row, dict):
+                continue
+            rail = int(row["rail"])
+            pose = int(row["pose"])
+            by_rail.setdefault(rail, []).append((pose, colors[offset], masks[offset]))
+    dest = root / "worldstereo" / "joint"
+    _replace_mp4(joint_colors, dest / "render" / "render.mp4")
+    _replace_mp4(joint_masks, dest / "mask" / "render_mask.mp4")
+    for rail, items in by_rail.items():
+        items.sort(key=lambda row: row[0])
+        folder = root / rail_view_rel(rail, "front")
+        _replace_mp4([frame for _, frame, _ in items], folder / "render" / "render.mp4")
+        _replace_mp4([frame for _, _, frame in items], folder / "mask" / "render_mask.mp4")
+    print("WS\tinputs", flush=True)
 
 
 def _load_rail(root: Path, index: int) -> np.ndarray:
@@ -228,35 +310,21 @@ def joint_chunks(scene: str, order: list[int], frames_per_rail: int | None = Non
     return joint_plan(joint_counts(scene, order), frames_per_rail)
 
 
-def _moge_cloud(pano_rgb: np.ndarray, device: str) -> tuple[np.ndarray, np.ndarray]:
-    splatkit = REPO_ROOT / "vendor" / "splatkit"
-    if str(splatkit) not in sys.path:
-        sys.path.insert(0, str(splatkit))
-    from core import matrix3d_pipeline as mp
+def moge_erp_depth(scene: str, pano_rgb: np.ndarray, device: str) -> tuple[np.ndarray, np.ndarray]:
+    """Cached scene depth at the mesh canvas. ``valid`` is the mask before the sky fill."""
+    del pano_rgb
+    from engine.depth.scene_depth import depth_at, ensure_scene_depth
+    from engine.world.defaults import MESH_CANVAS
 
-    ckpt = REPO_ROOT / "models" / "MoGe" / "model.pt"
-    if not ckpt.is_file():
-        raise FileNotFoundError(f"missing MoGe weights {ckpt}")
-    small = cv2.resize(pano_rgb, MOGE_CANVAS, interpolation=cv2.INTER_AREA)
-    model = mp.get_moge_model(ckpt=str(ckpt), device=device)
-    depth, mask = mp.moge_panorama_depth(
-        small,
-        model=model,
-        ckpt=str(ckpt),
-        device=device,
-        resolution_level=9,
-    )
-    depth = np.asarray(depth, dtype=np.float32)
-    mask = np.asarray(mask, dtype=bool)
-    if not mask.any():
-        raise RuntimeError("MoGe panorama mask is empty")
-    # Same sky fill as Plot Camera: invalid depth is pushed far, not dropped.
-    depth = depth.copy()
-    depth[~mask] = 2.0 * float(depth[mask].max())
-    model.to("cpu")
-    import torch
+    depth, valid = depth_at(ensure_scene_depth(scene, device), MESH_CANVAS, fill_sky=True)
+    if not valid.any():
+        raise RuntimeError("scene depth mask is empty")
+    return depth, valid
 
-    torch.cuda.empty_cache()
+
+def _moge_cloud(scene: str, pano_rgb: np.ndarray, device: str) -> tuple[np.ndarray, np.ndarray]:
+    depth, _valid = moge_erp_depth(scene, pano_rgb, device)
+    small = cv2.resize(pano_rgb, (depth.shape[1], depth.shape[0]), interpolation=cv2.INTER_AREA)
     step = POINT_STRIDE
     points, colors = erp_points(depth[::step, ::step], small[::step, ::step])
     finite = np.isfinite(points).all(axis=1)
@@ -307,8 +375,45 @@ def _write_bank(root: Path, erp: np.ndarray, bank: dict, K: np.ndarray) -> None:
     (root / "pano_bank" / "cameras.json").write_text(json.dumps(cameras), encoding="utf-8")
 
 
+class _Guide:
+    """Renders a trajectory. ``close`` frees the mesh renderer before the DiT loads."""
+
+    def __init__(self, kind: str, renderer=None, points=None, colors=None, device: str = "cpu", K=None):
+        self.kind = kind
+        self.renderer = renderer
+        self.points = points
+        self.colors = colors
+        self.device = device
+        self.K = K
+
+    def __call__(self, w2cs: np.ndarray) -> tuple[list[np.ndarray], list[np.ndarray]]:
+        poses = np.asarray(w2cs)
+        if self.kind == "mesh":
+            from engine.world.defaults import GUIDE_SUPERSAMPLE
+
+            rgb: list[np.ndarray] = []
+            empty: list[np.ndarray] = []
+            from engine.world.render import clean_guide
+
+            for pose in poses:
+                view = self.renderer.render(pose, self.K, D.SIZE_H, D.SIZE_W, supersample=GUIDE_SUPERSAMPLE)
+                frame, hole = clean_guide(view.rgb, view.empty)
+                rgb.append(frame)
+                empty.append(hole)
+            return rgb, empty
+        rgb_np, empty_np = _render_traj(self.points, self.colors, poses, self.K, self.device)
+        return [frame for frame in rgb_np], [frame for frame in empty_np]
+
+    def close(self) -> None:
+        if self.renderer is not None:
+            self.renderer.close()
+            self.renderer = None
+
+
 def _prepare_input(scene: str, prompt: str, device: str):
-    """Pano, pin intrinsics, MoGe cloud, and the WorldStereo input root."""
+    """Pano, pin intrinsics, and a guide renderer for the WorldStereo input root."""
+    from engine.world.defaults import GUIDE_RENDERER
+
     root = scene_dir(scene)
     pano_file = pano_path(scene)
     if not pano_file.is_file():
@@ -329,14 +434,25 @@ def _prepare_input(scene: str, prompt: str, device: str):
     caption = {"short caption": prompt, "medium caption": prompt, "long caption": prompt}
     (out / "prompt.json").write_text(json.dumps(caption, indent=2) + "\n", encoding="utf-8")
     _write_bank(out, erp, pin_bank_cameras(), K)
-    points, colors = _moge_cloud(erp, device)
-    norms = np.linalg.norm(points, axis=1)
-    print(
-        f"STATUS // points={points.shape[0]} radius_p50={float(np.median(norms)):.3f} "
-        f"radius_p95={float(np.quantile(norms, 0.95)):.3f}",
-        flush=True,
-    )
-    return root, erp, K, out, points, colors
+    if GUIDE_RENDERER == "mesh":
+        from engine.world.pano_mesh import ensure_pano_mesh, load_ground
+        from engine.world.render import WorldRenderer
+
+        piece = ensure_pano_mesh(scene, erp, device)
+        renderer = WorldRenderer([piece], {"pano": erp}, device, ground=load_ground(scene))
+        guide = _Guide("mesh", renderer=renderer, device=device, K=K)
+    elif GUIDE_RENDERER == "points":
+        points, colors = _moge_cloud(scene, erp, device)
+        norms = np.linalg.norm(points, axis=1)
+        print(
+            f"STATUS // points={points.shape[0]} radius_p50={float(np.median(norms)):.3f} "
+            f"radius_p95={float(np.quantile(norms, 0.95)):.3f}",
+            flush=True,
+        )
+        guide = _Guide("points", points=points, colors=colors, device=device, K=K)
+    else:
+        raise RuntimeError(f"unknown GUIDE_RENDERER {GUIDE_RENDERER}")
+    return root, erp, K, out, guide
 
 
 def _write_traj(
@@ -345,17 +461,15 @@ def _write_traj(
     erp: np.ndarray,
     w2cs: np.ndarray,
     K: np.ndarray,
-    points: np.ndarray,
-    colors: np.ndarray,
+    guide: _Guide,
     prompt: str,
-    device: str,
 ) -> tuple[list[np.ndarray], list[np.ndarray]]:
     view = out / view_id
     traj = view / "traj0"
     traj.mkdir(parents=True, exist_ok=True)
     start = cut_pinhole(erp, w2cs[0], K, D.SIZE_W, D.SIZE_H)
     cv2.imwrite(str(view / "start_frame.png"), cv2.cvtColor(start, cv2.COLOR_RGB2BGR))
-    rgb, empty = _render_traj(points, colors, w2cs, K, device)
+    rgb, empty = guide(w2cs)
     color_bgr = [cv2.cvtColor(frame, cv2.COLOR_RGB2BGR) for frame in rgb]
     mask_bgr = [cv2.cvtColor(np.where(frame, 255, 0).astype(np.uint8), cv2.COLOR_GRAY2BGR) for frame in empty]
     _write_mp4(color_bgr, traj / "render.mp4")
@@ -368,21 +482,24 @@ def _write_traj(
 
 def build_scene(scene: str, jobs: list[TrajJob], prompt: str, device: str = "cuda:0") -> Path:
     """Write ``<scene>/worldstereo/input`` for one front view per rail."""
-    root, erp, K, out, points, colors = _prepare_input(scene, prompt, device)
-    for job in jobs:
-        w2c_full = _load_rail(root, job.rail_index)
-        w2cs, kept = select_poses(w2c_full, job)
-        colors_bgr, masks_bgr = _write_traj(out, job.view_id, erp, w2cs, K, points, colors, prompt, device)
-        rail_out = root / job.output_rel
-        (rail_out / "render").mkdir(parents=True, exist_ok=True)
-        (rail_out / "mask").mkdir(parents=True, exist_ok=True)
-        _write_mp4(colors_bgr, rail_out / "render" / "render.mp4")
-        _write_mp4(masks_bgr, rail_out / "mask" / "render_mask.mp4")
-        camera = {
-            "extrinsic": kept.tolist(),
-            "intrinsic": [K.tolist() for _ in range(kept.shape[0])],
-        }
-        (rail_out / "camera.json").write_text(json.dumps(camera), encoding="utf-8")
+    root, erp, K, out, guide = _prepare_input(scene, prompt, device)
+    try:
+        for job in jobs:
+            w2c_full = _load_rail(root, job.rail_index)
+            w2cs, kept = select_poses(w2c_full, job)
+            colors_bgr, masks_bgr = _write_traj(out, job.view_id, erp, w2cs, K, guide, prompt)
+            rail_out = root / job.output_rel
+            (rail_out / "render").mkdir(parents=True, exist_ok=True)
+            (rail_out / "mask").mkdir(parents=True, exist_ok=True)
+            _write_mp4(colors_bgr, rail_out / "render" / "render.mp4")
+            _write_mp4(masks_bgr, rail_out / "mask" / "render_mask.mp4")
+            camera = {
+                "extrinsic": kept.tolist(),
+                "intrinsic": [K.tolist() for _ in range(kept.shape[0])],
+            }
+            (rail_out / "camera.json").write_text(json.dumps(camera), encoding="utf-8")
+    finally:
+        guide.close()
     return out
 
 
@@ -402,23 +519,27 @@ def build_joint_scene(
     device: str = "cuda:0",
 ) -> Path:
     """One input trajectory per joint chunk. The first frame of chunk 0 is the star."""
-    root, erp, K, out, points, colors = _prepare_input(scene, prompt, device)
+    root, erp, K, out, guide = _prepare_input(scene, prompt, device)
     chunks = joint_chunks(scene, order, frames_per_rail)
     rails = {index: _load_rail(root, index) for index, _count in joint_counts(scene, order)}
     manifest = []
-    for chunk in chunks:
-        stops, anchor = _chunk_model_stops(chunks, chunk)
-        w2cs = np.stack([rails[stop.rail][stop.pose] for stop in stops], axis=0)
-        view_id = f"joint_c{chunk.index:02d}"
-        _write_traj(out, view_id, erp, w2cs, K, points, colors, prompt, device)
-        manifest.append(
-            {
-                "index": chunk.index,
-                "view_id": view_id,
-                "anchor": anchor,
-                "frames": [{"rail": stop.rail, "pose": stop.pose} for stop in chunk.frames],
-            }
-        )
+    try:
+        for chunk in chunks:
+            stops, anchor = _chunk_model_stops(chunks, chunk)
+            w2cs = np.stack([rails[stop.rail][stop.pose] for stop in stops], axis=0)
+            view_id = f"joint_c{chunk.index:02d}"
+            _write_traj(out, view_id, erp, w2cs, K, guide, prompt)
+            manifest.append(
+                {
+                    "index": chunk.index,
+                    "view_id": view_id,
+                    "anchor": anchor,
+                    "frames": [{"rail": stop.rail, "pose": stop.pose} for stop in chunk.frames],
+                }
+            )
+    finally:
+        guide.close()
     (out / "joint_plan.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    publish_guide_preview(scene)
     return out
 

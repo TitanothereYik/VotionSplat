@@ -56,6 +56,10 @@ def caption_argv(image: str) -> list[str]:
     return [python_executable(), "-m", "engine.workers.caption", "--image", image]
 
 
+def detect_fov_argv(image: str) -> list[str]:
+    return [python_executable(), "-m", "engine.workers.detect_fov", "--image", image]
+
+
 def moge_argv(scene: str) -> list[str]:
     return [python_executable(), "-m", "engine.workers.moge", "--scene", scene]
 
@@ -147,13 +151,15 @@ def worldstereo_argv(
     return args
 
 
-def pinhole_hires_argv(scene: str) -> list[str]:
+def pinhole_hires_argv(scene: str, source: str = "world") -> list[str]:
     return [
         python_executable(),
         "-m",
         "engine.workers.pinhole_hires",
         "--scene",
         scene,
+        "--source",
+        source,
     ]
 
 

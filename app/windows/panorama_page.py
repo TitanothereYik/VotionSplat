@@ -202,6 +202,10 @@ class PanoramaPage(QWidget):
         self.hfov_edit.setAlignment(Qt.AlignmentFlag.AlignRight)
         self.hfov_edit.setFixedWidth(72)
         hfov_row.addWidget(self.hfov_edit)
+        self.btn_detect_fov = QPushButton("Detect")
+        self.btn_detect_fov.setObjectName("btnGhost")
+        self.btn_detect_fov.clicked.connect(self._detect_fov)
+        hfov_row.addWidget(self.btn_detect_fov)
         r.addLayout(hfov_row)
         self._hfov_ticks = int(round(1.0 / D.H_FOV_DEG_STEP))
         self.hfov = QSlider(Qt.Orientation.Horizontal)
@@ -686,6 +690,14 @@ class PanoramaPage(QWidget):
         if not self.drop_2d.path:
             return
         self.requestJob.emit(["__caption__", self.drop_2d.path])
+
+    def _detect_fov(self) -> None:
+        if not self.drop_2d.path:
+            return
+        self.requestJob.emit(["__detect_fov__", self.drop_2d.path])
+
+    def apply_hfov(self, degrees: float) -> None:
+        self.hfov_edit.setValue(float(degrees))
 
     def apply_caption(self, text: str) -> None:
         self.surr_box.setPlainText(D.with_surroundings_suffix(text))

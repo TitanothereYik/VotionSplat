@@ -28,8 +28,8 @@ def load_scene_cloud(scene_root: Path) -> np.ndarray:
     npz = scene_root / "moge" / "cloud.npz"
     if not npz.is_file():
         raise FileNotFoundError(str(npz))
-    data = np.load(npz)
-    pts = data["points"]
+    with np.load(npz) as data:
+        pts = np.array(data["points"], copy=True)
     if pts.ndim != 2 or pts.shape[0] < 50:
         raise ValueError(
             f"scene reference cloud too sparse to plan against ({0 if pts.ndim != 2 else pts.shape[0]} points)"

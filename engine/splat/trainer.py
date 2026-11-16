@@ -320,6 +320,7 @@ class SplatTrainer:
             "resolution_scale": self.resolution_scale,
             "holdout": self.holdout,
             "views": len(self.backend.views),
+            "images": getattr(self, "dataset_images", ""),
             "done": bool(done),
         }
         self.meta_path.parent.mkdir(parents=True, exist_ok=True)
@@ -364,6 +365,17 @@ class SplatTrainer:
             status(f"missing {colmap / 'sparse' / '0'} — Reconstruct first")
             return 2
         status(f"dataset {colmap}")
+        if self.mode in ("train", "continue", "retrain"):
+            from engine.hires.pinhole import active_choice, choice_matches_dataset, choice_name, dataset_images
+
+            images = dataset_images(self.scene_dir)
+            choice = active_choice(self.scene_dir)
+            self.dataset_images = images
+            if choice and not choice_matches_dataset(choice, images):
+                status(
+                    f"dataset is {images or 'unmarked'} but Generate is {choice_name(choice)}. Reconstruct again."
+                )
+                return 2
         if self.mode in ("export", "export_compact", "export_compact_dc"):
             return self.run_export()
         if self.mode == "view":
@@ -474,6 +486,16 @@ class SplatTrainer:
                 if p.is_file():
                     p.unlink()
             status("Retrain — checkpoint cleared")
+        elif self.ckpt_path.is_file() and self.meta_path.is_file():
+            try:
+                saved = json.loads(self.meta_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                saved = {}
+            trained = str(saved.get("images") or "")
+            current = str(getattr(self, "dataset_images", "") or "")
+            if current and trained != current:
+                status("checkpoint is not from this HiRes path — Retrain")
+                return 2
 
         resume_meta = None
         controller_state: dict = {}
@@ -492,7 +514,6 @@ class SplatTrainer:
         elif self.mode == "continue":
             status("Continue needs checkpoints/splat_latest.pt")
             return 2
-
         backend = self._make_backend()
         self.backend = backend
         t_load = time.perf_counter()

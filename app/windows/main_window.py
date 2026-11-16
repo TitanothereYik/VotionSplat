@@ -38,6 +38,7 @@ from engine.job import (
     REPO_ROOT,
     camplot_argv,
     caption_argv,
+    detect_fov_argv,
     download_argv,
     dummy_argv,
     known_pose_argv,
@@ -404,7 +405,12 @@ class MainWindow(QMainWindow):
         self.geo_page.requestJob.connect(self._on_geo_job)
         self.geo_page.requestStop.connect(self._stop_job)
         self.pages.addWidget(self.geo_page)
-        self.gen_page = GeneratePage(lambda: self.scene.text(), self.geo_page.generate_unlocked)
+        self.gen_page = GeneratePage(
+            lambda: self.scene.text(),
+            self.geo_page.generate_unlocked,
+            release_media=self.geo_page.release_open_media,
+            after_clear=self.geo_page.try_load_existing,
+        )
         self.gen_page.requestJob.connect(self._on_gen_job)
         self.gen_page.requestStop.connect(self._stop_job)
         self.geo_page.railsChanged.connect(self.gen_page.refresh)
@@ -794,6 +800,14 @@ class MainWindow(QMainWindow):
             self._write_florence_pin()
             self._append_log(raw)
             return
+        if raw.startswith("HFOV\t"):
+            try:
+                self.pano_page.apply_hfov(float(raw.split("\t", 1)[1]))
+            except ValueError:
+                self._append_log(f"STATUS // bad h_fov line {raw}")
+                return
+            self._append_log(raw)
+            return
         if raw.startswith("PANO\t"):
             self.pano_page.apply_pano(raw.split("\t", 1)[1])
             self._append_log(raw)
@@ -883,6 +897,9 @@ class MainWindow(QMainWindow):
         if args and args[0] == "__caption__":
             self._start_job(caption_argv(args[1]), "caption")
             return
+        if args and args[0] == "__detect_fov__":
+            self._start_job(detect_fov_argv(args[1]), "detect_fov")
+            return
         self._start_job(pano_argv(args), "pano")
 
     def _on_geo_job(self, args: list[str]) -> None:
@@ -935,11 +952,13 @@ class MainWindow(QMainWindow):
                 self._append_log("STATUS // busy — Stop the current job first")
                 return
             scene = args[1] if len(args) > 1 else self.scene.text()
-            self._append_log(f"STATUS // HiRes all for {scene} — WorldStereo frames")
+            source = args[2] if len(args) > 2 and args[2] in ("world", "frame") else "world"
+            kind = "WorldStereo upscale" if source == "frame" else "panorama composite"
+            self._append_log(f"STATUS // HiRes all for {scene} — {kind}")
             if hasattr(self, "gen_page"):
                 rails = getattr(self.gen_page, "_ws_order", None) or []
                 self.gen_page.on_generate_start(rails, kind="pinhole_hires")
-            self._start_job(pinhole_hires_argv(scene), "pinhole_hires")
+            self._start_job(pinhole_hires_argv(scene, source), "pinhole_hires")
             return
         if args[0] == "__worldstereo__":
             if self._job_running():

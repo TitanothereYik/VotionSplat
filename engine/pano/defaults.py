@@ -39,6 +39,10 @@ WARP_GRID_SPACING_DEG = 10
 WARP_GUIDE_OPACITY = 0.55
 WARP_FILL_COLOR = "#000000"
 
+# 8K paste of the source photo after the upscale tail. Feather is pixels at 8192 wide.
+PHOTO_FEATHER_PX = 128
+PHOTO_PYRAMID_LEVELS = 5
+
 # MickmumpitzPanoHarmonizeBoundary JSON [1, 8, 800, true]
 HARMONIZE_STRENGTH = 1.0
 HARMONIZE_SOLVE_SCALE = 8
@@ -189,7 +193,7 @@ Pick 2D Images (your photo is placed on the sphere, Krea 2 + Ostris Edit + ERP o
 
 Pano resolution: keep 2:1. 2048 x 1024 is the sweet spot for Krea 2. Both modes, the ERP reference and the timestep curve follow it. Final size after the shared tail is 8192 x 4096.
 
-2D Images: load the photo, set h_fov, and write one sentence about the surroundings (or Florence-2 caption, then edit). Generate runs native Ostris Edit + ERP outpaint LoRA.
+2D Images: load the photo, set h_fov, and write one sentence about the surroundings (or Florence-2 caption, then edit). Detect fills h_fov from the photo's lens EXIF; without EXIF (or after a crop) it uses a MoGe guess, which can be 10 degrees off on a straight-on facade. Generate runs native Ostris Edit + ERP outpaint LoRA, then pastes the original photo back onto the 8K panorama with a feathered seam.
 
 text: scene sentence after the locked trigger prefix. After Generate, prompt.txt = prefix + sentence. Votion does not need a dummy 2D image in text mode.
 

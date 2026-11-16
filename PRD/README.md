@@ -43,12 +43,15 @@ Geometry / Splat dummy JS: [rail-dummy.js](../docs/rail-dummy.js)
 - **Splat train viewport:** live rasterized 3DGS (not a point cloud). Max steps any integer ≥ 1. Star reset; LMB look, RMB pan, wheel dolly; zoom uncapped. Stop on rail and job bar. MCMC Compact shares the LiteGS Gaussians. Needle takeover / crushed tones are bugs. Locked 2026-09-05.
 - **Splat trainer rebuild:** vendored **LiteGS** backend (built locally at Setup, Inria licence, never shipped) with two density controllers, **LiteGS** (default) and **MCMC Compact** (Jung & Hong 2025 §3.1 only). Shared-memory viewport, Pause / Resume, real Gaussian budget, optimizer-inclusive checkpoint, full-SH `splat.ply` + compact export, hold-out PSNR, old gsplat checkpoints show “Retrain required”. Locked 2026-09-07.
 - **Gnomonic cube faces:** SphereSfM `SPHERE` match, then Votion remaps cube-face PNGs to true 90° gnomonic pinholes. Do not COLMAP-pinhole raw ERP; do not un-bend `points3D` to fix a bowed splat. Retrain after Reconstruct. Locked 2026-09-08.
+- **Photo paste and Detect (2026-11-11):** 2D Images pastes the source photo back onto the 8K panorama with a feathered seam. Detect fills h_fov from lens EXIF, or from MoGe when the photo has no lens tags or was cropped.
+- **One scene depth (2026-11-11):** Geometry, Plot Camera, the guide, and HiRes read `outputs/<scene>/depth/`. Default backend is MoGe-2 (Yik, alpine bake-off). A rail plotted on an older depth must be re-plotted before Generate.
+- **Geometry editor (2026-11-12):** dragging a point and switching Active rail do not rebuild Generate or Reconstruct. Play writes the rail. Confirm rails refreshes the other pages.
 - **V1 archive (do not mix):** `d:\InSpatio World\Yik Votion WorldFM\` (Gradio + WSL)
 - **Engine:** native Python. No ComfyUI in the product. No WSL.
 - **Shell:** PySide6, Engineering Blueprint look from V1 (`theme.css` tokens)
 - **Quality GPU:** RTX 3090 24GB, CUDA device **0** unless the user picks another
 
-Happy path: **2D Images** (or 360 Images / text) → 8K ERP → Compute geometry → four straight rails → WorldStereo (up to six views per rail) → HiRes all (pinhole) → known-pose COLMAP → in-app LiteGS (**LiteGS** or **MCMC Compact** controller, Gaussian budget) → full-SH `splat.ply` → optional Open in Brush / LichtFeld / Postshot → UE 5.5 + MLSLabsRenderer.
+Happy path: **2D Images** (or 360 Images / text) → 8K ERP, with the original photo pasted back on 2D Images → one MoGe-2 scene depth → four straight rails → WorldStereo joint sample → HiRes all (pinhole) → known-pose COLMAP → in-app LiteGS (**LiteGS** or **MCMC Compact** controller, Gaussian budget) → full-SH `splat.ply` → optional Open in Brush / LichtFeld / Postshot → UE 5.5 + MLSLabsRenderer.
 
 ## Shared window (every page)
 

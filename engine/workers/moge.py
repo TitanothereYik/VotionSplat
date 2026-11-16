@@ -50,11 +50,6 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     ckpt = moge_ckpt()
-    if not ckpt.is_file():
-        log(f"MISSING_moge {moge_url()}")
-        log("STATUS // MoGe model.pt not in models/MoGe — Download models (P2 subset)")
-        return 3
-
     idx = int(os.environ.get("CUDA_DEVICE_INDEX", "0") or 0)
     device = f"cuda:{idx}"
     level = max(0, min(9, int(args.moge_level)))
@@ -65,7 +60,9 @@ def main(argv: list[str] | None = None) -> int:
 
     import cv2
     import numpy as np
-    from core import matrix3d_pipeline as mp
+
+    from engine.depth.defaults import DEPTH_BACKEND
+    from engine.depth.scene_depth import depth_at, ensure_scene_depth
 
     bgr = cv2.imread(str(pano_file), cv2.IMREAD_COLOR)
     if bgr is None:
@@ -74,18 +71,14 @@ def main(argv: list[str] | None = None) -> int:
     pano = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
     pano = cv2.resize(pano, (2048, 1024), interpolation=cv2.INTER_AREA)
 
-    job_progress(2, 6, "load MoGe")
-    model = mp.get_moge_model(ckpt=str(ckpt), device=device)
+    job_progress(2, 6, "load depth")
+    if DEPTH_BACKEND == "moge1" and not ckpt.is_file():
+        log(f"MISSING_moge {moge_url()}")
+        log("STATUS // MoGe model.pt not in models/MoGe — Download models (P2 subset)")
+        return 3
     job_progress(3, 6, "depth")
-    depth, mask = mp.moge_panorama_depth(
-        pano,
-        model=model,
-        ckpt=str(ckpt),
-        device=device,
-        resolution_level=level,
-        merge_long=1440,
-        merge_short=720,
-    )
+    scene_depth = ensure_scene_depth(args.scene, device)
+    depth, mask = depth_at(scene_depth, (2048, 1024), fill_sky=False)
     job_progress(4, 6, "cloud + orthos")
     pts, cols = equirect_to_cloud(depth, mask, pano, budget)
     views = equirect_to_ortho_views(depth, mask, pano)
@@ -101,6 +94,7 @@ def main(argv: list[str] | None = None) -> int:
         "count": int(pts.shape[0]),
         "device": device,
         "pano": str(pano_file),
+        "depth_key": scene_depth.key,
         "views": {},
         "points": np.round(pts, 3).tolist(),
         "colors": cols.tolist(),

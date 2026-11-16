@@ -3,17 +3,20 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
+import shutil
 import sys
 from pathlib import Path
 
+import numpy as np
 from PIL import Image
 
 from engine.job import REPO_ROOT, job_progress
 from engine.pano import defaults as D
 from engine.pano.aspect import aspect_error, is_2to1
 from engine.pano.comfy_bootstrap import apply_comfy_argv
-from engine.pano.scene_io import copy_as_pano, pano_path, write_prompt
+from engine.pano.scene_io import copy_as_pano, pano_path, scene_dir, write_prompt
 
 
 def _cuda_index() -> int:
@@ -47,6 +50,26 @@ def _clamp_hfov(value: float) -> float:
     return max(D.H_FOV_DEG_MIN, min(D.H_FOV_DEG_MAX, float(value)))
 
 
+def _clear_pano_source(scene: str) -> None:
+    folder = scene_dir(scene) / "pano_source"
+    if folder.exists():
+        shutil.rmtree(folder)
+
+
+def _save_pano_source(scene: str, photo: Image.Image, h_fov: float) -> None:
+    folder = scene_dir(scene) / "pano_source"
+    folder.mkdir(parents=True, exist_ok=True)
+    photo.save(folder / "photo.png", format="PNG")
+    payload = {
+        "h_fov": float(h_fov),
+        "yaw": 0.0,
+        "pitch": 0.0,
+        "width": int(photo.size[0]),
+        "height": int(photo.size[1]),
+    }
+    (folder / "pano_source.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
 def _run_2d(
     scene: str,
     image: Path,
@@ -70,12 +93,19 @@ def _run_2d(
     with Image.open(image) as im:
         im.load()
         photo = im.convert("RGB")
+    _save_pano_source(scene, photo, hfov)
     apply_comfy_argv(REPO_ROOT / "models", pano_path(scene).parent, _cuda_index())
     from engine.pano.krea_runtime import run_image_pano
+    from engine.pano.photo_paste import paste_photo
     from engine.pano.scene_io import save_pano_image
 
     out = run_image_pano(photo, surroundings, hfov, seed, seam_seed, upscaler_prompt)
-    save_pano_image(scene, out)
+    before = scene_dir(scene) / "_work"
+    before.mkdir(parents=True, exist_ok=True)
+    out.convert("RGB").save(before / "pano_before_paste.png", format="PNG")
+    pasted = paste_photo(np.asarray(out.convert("RGB")), np.asarray(photo), hfov)
+    print(f"STATUS // photo pasted at 8K feather={D.PHOTO_FEATHER_PX}", flush=True)
+    save_pano_image(scene, Image.fromarray(pasted))
     write_prompt(scene, prompt)
     print(f"PROMPT\t{prompt}", flush=True)
     return 0
@@ -92,6 +122,7 @@ def _load_erp(path: Path) -> Image.Image:
 
 
 def _run_360_use(scene: str, image: Path, prompt: str) -> int:
+    _clear_pano_source(scene)
     print("STATUS // 360 Images - Use as pano.png (no Krea)", flush=True)
     rgb = _load_erp(image)
     dest = copy_as_pano(scene, image)
@@ -102,6 +133,7 @@ def _run_360_use(scene: str, image: Path, prompt: str) -> int:
 
 
 def _run_360_upscale(scene: str, image: Path, prompt: str, upscaler_prompt: str) -> int:
+    _clear_pano_source(scene)
     print("STATUS // 360 Images - Upscale to 8K (shared tail)", flush=True)
     rgb = _load_erp(image)
     write_prompt(scene, prompt)
@@ -122,6 +154,7 @@ def _run_text(scene: str, sentence: str, seed: int, seam_seed: int, upscaler_pro
         print("STATUS // empty scene sentence - block Generate", flush=True)
         return 2
     # Prefix is locked. User sentence is appended after the comma (dummy + space).
+    _clear_pano_source(scene)
     prompt = D.TRIGGER_PREFIX + " " + sentence
     print("STATUS // text - no 2D input image", flush=True)
     print(f"STATUS // Krea prompt prefix locked", flush=True)

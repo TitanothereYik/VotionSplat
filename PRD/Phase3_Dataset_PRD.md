@@ -16,6 +16,12 @@
 
 This is the quality leap. WAN stays **1440×720**. Sharpness is the **8K reprojection trick**, not a bigger video model and not SeedVR.
 
+**Superseded for the Quality route (Index #61, 2026-10-30).** Generate is WorldStereo memory-DMD. See [WorldStereo2_MemoryDMD_FP8_PRD.md](WorldStereo2_MemoryDMD_FP8_PRD.md). The graph numbers below stay as the copied source.
+
+**Scene depth (2026-11-11).** Geometry, Plot Camera, the guide, and HiRes read one cache, `outputs/<scene>/depth/`. The default backend is MoGe-2, picked by Yik from the alpine bake-off. A rail plotted on an older depth must be re-plotted before Generate. The key is `rails/rail_XX.depth_key`, which Start over keeps.
+
+**Geometry editor (2026-11-12).** Dragging a point and switching Active rail update the floor and side views only. They do not rebuild Generate or Reconstruct. Play writes the rail file and starts the mesh flight. Confirm rails refreshes the other pages.
+
 ---
 
 ## 1. Product overview

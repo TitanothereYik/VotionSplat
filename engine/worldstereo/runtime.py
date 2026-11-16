@@ -1,5 +1,8 @@
 """One-process WorldStereo memory-DMD run. The bank stays across rails.
 
+Retrieval uses HY-World's depth-scaled far plane. The bank still keeps every
+generated frame, so the next joint chunk can see the pose beside it.
+
 Load order matches the spike that fit on this machine: text and CLIP, then
 DINOv2 retrieval, then the scaled FP8 DiT. DINOv2 is moved off the GPU before
 each forward. The DiT is never dequantized to BF16. WorldMirror is not called.
@@ -19,6 +22,7 @@ import torch
 from engine.job import REPO_ROOT
 from engine.pano.scene_io import scene_dir
 from engine.worldstereo import defaults as D
+from engine.world.layers import clear_layers_from, ensure_layers, refresh_guide
 from engine.worldstereo.adapter import TrajJob, input_root
 from engine.worldstereo.views import diffusion_num_frames
 from engine.worldstereo.pipeline import (
@@ -81,6 +85,7 @@ def save_bank(bank, path: Path) -> None:
         "fnames": list(bank.fnames),
         "w2cs": bank.ref_w2cs.detach().float().cpu().numpy().tolist(),
         "Ks": bank.ref_Ks.detach().float().cpu().numpy().tolist(),
+        "depth_median": float(getattr(bank, "depth_median", 0.0)),
     }
     (path / "bank.json").write_text(json.dumps(payload), encoding="utf-8")
 
@@ -98,6 +103,10 @@ def load_bank_into(bank, path: Path) -> None:
     bank.fnames = list(payload["fnames"])
     bank.ref_w2cs = torch.tensor(payload["w2cs"], dtype=torch.float32, device=bank.device)
     bank.ref_Ks = torch.tensor(payload["Ks"], dtype=torch.float32, device=bank.device)
+    if payload.get("depth_median"):
+        bank.depth_median = float(payload["depth_median"])
+    if hasattr(bank, "ref_depths"):
+        bank.ref_depths = [None] * len(frames)
     bank.mem_size = len(frames)
 
 
@@ -147,6 +156,8 @@ def _remember_frames(bank, frames, w2cs, ks, view_id: str, traj_id: str, start: 
     bank.ref_w2cs = torch.cat([bank.ref_w2cs, poses.to(device=bank.device, dtype=torch.float32)], dim=0)
     bank.ref_Ks = torch.cat([bank.ref_Ks, eyes.to(device=bank.device, dtype=torch.float32)], dim=0)
     bank.ref_frames.extend(kept)
+    if hasattr(bank, "ref_depths"):
+        bank.ref_depths.extend([None] * len(kept))
     for index in range(start, start + len(kept)):
         bank.fnames.append(f"{view_id}/{traj_id}/{index:04d}")
     bank.mem_size = len(bank.ref_frames)
@@ -168,13 +179,15 @@ def _encode_clip(image_path: Path, clip, processor) -> torch.Tensor:
     return embeds
 
 
-def _open_bank(ws_cfg, scene_input: Path):
+def _open_bank(ws_cfg, scene: str, scene_input: Path):
     import imagesize
-    from src.retrieval_wm import SimpleMemoryBank
+
+    from engine.worldstereo.hy_bank import HyMemoryBank, scene_depth_median
 
     sample = next((scene_input / "pano_bank" / "images").glob("*.png"))
     width, height = imagesize.get(str(sample))
-    return SimpleMemoryBank(
+    median = scene_depth_median(scene)
+    bank = HyMemoryBank(
         cfg=ws_cfg,
         root_path=str(scene_input),
         image_width=width,
@@ -184,7 +197,13 @@ def _open_bank(ws_cfg, scene_input: Path):
         align_nframe=D.ALIGN_NFRAME,
         rank=0,
         world_size=1,
+        depth_median=median,
     )
+    _log(
+        f"STATUS // HY panorama memory depth_median={bank.depth_median:.4f} "
+        f"far={bank.far:.4f} bank={bank.mem_size}"
+    )
+    return bank
 
 
 def _retrieve(bank, job: TrajJob, scene_input: Path):
@@ -415,7 +434,7 @@ def generate(
     from omegaconf import OmegaConf
 
     ws_cfg = OmegaConf.create(json.loads(config_path.read_text(encoding="utf-8")))
-    bank = _open_bank(ws_cfg, scene_input)
+    bank = _open_bank(ws_cfg, scene, scene_input)
     if snap is not None:
         if not (snap / "bank.json").is_file():
             _log(f"STATUS // missing memory snapshot {snap}")
@@ -611,7 +630,7 @@ def generate_joint(
     processor = CLIPImageProcessor.from_pretrained(str(WAN_CFG / "image_processor"), local_files_only=True)
 
     ws_cfg = OmegaConf.create(json.loads(config_path.read_text(encoding="utf-8")))
-    bank = _open_bank(ws_cfg, scene_input)
+    bank = _open_bank(ws_cfg, scene, scene_input)
     ranges: list[tuple[int, int]] = []
     cursor = 0
     for item in manifest:
@@ -663,6 +682,7 @@ def generate_joint(
             load_bank_into(bank, snap)
             _log(f"STATUS // restored joint memory size={bank.mem_size}")
 
+    clear_layers_from(scene, start_chunk)
     model = None
     pipe = None
     vae = None
@@ -700,6 +720,8 @@ def generate_joint(
                 vae.to("cpu")
             if model is not None or vae is not None:
                 torch.cuda.empty_cache()
+            ensure_layers(scene, manifest, ranges, upto=index, device="cuda:0")
+            refresh_guide(scene, manifest, index, device="cuda:0")
             _log(f"STATUS // joint chunk {index} continues the previous frame")
         image_embeds = _encode_clip(scene_input / view_id / "start_frame.png", clip, processor)
         if model is not None:
@@ -750,6 +772,13 @@ def generate_joint(
         del frames, array, pil_frames, w2cs, ks, ref_index, ref_w2cs
         gc.collect()
         torch.cuda.empty_cache()
+
+    if model is not None:
+        model.to("cpu")
+    if vae is not None:
+        vae.to("cpu")
+    torch.cuda.empty_cache()
+    ensure_layers(scene, manifest, ranges, upto=len(manifest), device="cuda:0")
 
     images = []
     colors = []

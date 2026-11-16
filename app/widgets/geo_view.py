@@ -17,6 +17,7 @@ from PySide6.QtGui import (
     QBrush,
     QColor,
     QFont,
+    QImage,
     QMouseEvent,
     QPainter,
     QPainterPath,
@@ -44,6 +45,7 @@ class GeoCanvas(QWidget):
     knotMoved = Signal(int, float, float)
     lookMoved = Signal(float, float)
     lookTargetMoved = Signal(int, float, float)
+    dragFinished = Signal()
 
     def __init__(self, kind: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -70,8 +72,10 @@ class GeoCanvas(QWidget):
         self._show_cloud = False
         self._cloud_xy: np.ndarray | None = None
         self._cloud_rgb: np.ndarray | None = None
+        self._cloud_plate = QPixmap()
         self._cam = [0.0, 0.0, 256.0, 256.0]  # image-space x, y, w, h (y down)
         self._drag: dict | None = None
+        self._drag_moved = False
         self._last = QPointF()
 
     def sizeHint(self) -> QSize:
@@ -84,13 +88,16 @@ class GeoCanvas(QWidget):
     def set_ortho(self, png_path: Path | None, lo: list[float], hi: list[float]) -> None:
         self._lo = np.array(lo, dtype=np.float64)
         self._hi = np.array(hi, dtype=np.float64)
+        self._cloud_plate = QPixmap()
         if png_path is None or not Path(png_path).is_file():
             self._pix = QPixmap()
             self._img_w, self._img_h = 256, 256
             self._reset_cam()
             self.update()
             return
-        pix = QPixmap(str(png_path))
+        blob = Path(png_path).read_bytes()
+        pix = QPixmap()
+        pix.loadFromData(blob)
         self._pix = pix
         self._img_w = max(pix.width(), 1)
         self._img_h = max(pix.height(), 1)
@@ -98,6 +105,7 @@ class GeoCanvas(QWidget):
         self.update()
 
     def set_cloud(self, xyz: np.ndarray | None, rgb: np.ndarray | None) -> None:
+        self._cloud_plate = QPixmap()
         if xyz is None or len(xyz) == 0:
             self._cloud_xy = None
             self._cloud_rgb = None
@@ -137,12 +145,10 @@ class GeoCanvas(QWidget):
             self._targets = np.full_like(self._knots, np.nan)
         else:
             self._targets = np.asarray(targets, dtype=np.float64)
-        self.update()
 
     def set_other_rails(self, rails: list[dict] | None) -> None:
         """Inactive rails: dimmed splines only. Not draggable."""
         self._others = list(rails or [])
-        self.update()
 
     def toggle_cloud(self) -> None:
         self._show_cloud = not self._show_cloud
@@ -219,28 +225,47 @@ class GeoCanvas(QWidget):
 
     def paintEvent(self, event) -> None:  # noqa: ANN001
         p = QPainter(self)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, False)
         p.fillRect(self.rect(), QColor(8, 16, 24))
         dest = self._dest()
+        src = QRectF(self._cam[0], self._cam[1], self._cam[2], self._cam[3])
         if not self._pix.isNull():
-            src = QRectF(self._cam[0], self._cam[1], self._cam[2], self._cam[3])
             p.drawPixmap(dest, self._pix, src)
         if self._show_cloud and self._cloud_xy is not None and len(self._cloud_xy):
-            wxy = self._img_to_widget(self._cloud_xy)
-            rgb = self._cloud_rgb
-            p.setPen(Qt.PenStyle.NoPen)
-            for i, (x, y) in enumerate(wxy):
-                if rgb is not None and i < len(rgb):
-                    p.setBrush(QColor(int(rgb[i, 0]), int(rgb[i, 1]), int(rgb[i, 2]), 180))
-                else:
-                    p.setBrush(QColor(160, 180, 200, 140))
-                p.drawEllipse(QPointF(float(x), float(y)), 1.6, 1.6)
+            plate = self._cloud_plate_pix()
+            if not plate.isNull():
+                p.drawPixmap(dest, plate, src)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         if not self._enabled:
             return
         self._paint_others(p)
         if self._knots.shape[0] == 0:
             return
         self._paint_rail(p)
+
+    def _cloud_plate_pix(self) -> QPixmap:
+        """Coloured dots baked once. A drag used to draw each dot on every move."""
+        if not self._cloud_plate.isNull():
+            return self._cloud_plate
+        image = QImage(self._img_w, self._img_h, QImage.Format.Format_ARGB32_Premultiplied)
+        image.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(image)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setPen(Qt.PenStyle.NoPen)
+        rgb = self._cloud_rgb
+        xy = self._cloud_xy
+        if xy is None:
+            painter.end()
+            return self._cloud_plate
+        for i, (x, y) in enumerate(xy):
+            if rgb is not None and i < len(rgb):
+                painter.setBrush(QColor(int(rgb[i, 0]), int(rgb[i, 1]), int(rgb[i, 2]), 180))
+            else:
+                painter.setBrush(QColor(160, 180, 200, 140))
+            painter.drawEllipse(QPointF(float(x), float(y)), 1.6, 1.6)
+        painter.end()
+        self._cloud_plate = QPixmap.fromImage(image)
+        return self._cloud_plate
 
     def _paint_others(self, p: QPainter) -> None:
         dim = QColor(126, 200, 255, 70)
@@ -345,39 +370,43 @@ class GeoCanvas(QWidget):
         if event.button() != Qt.MouseButton.LeftButton:
             return
         self._last = event.position()
+        self._drag_moved = False
         if not self._enabled or self._knots.shape[0] == 0:
-            self._drag = {"kind": "pan"}
+            self._begin_drag({"kind": "pan"})
             return
         qx, qy = float(event.position().x()), float(event.position().y())
         pt = np.array([qx, qy], dtype=np.float64)
         px = self._hit_radius()
-        n = self._knots.shape[0]
         wvis = self._img_to_widget(self._world_to_img(self._knots))
         if self._mode == "per_point_look":
             wt = self._img_to_widget(self._world_to_img(self._display_targets()))
             d = np.linalg.norm(wt - pt, axis=1)
             i = int(np.argmin(d))
             if d[i] < px:
-                self._drag = {"kind": "target", "i": i}
+                self._begin_drag({"kind": "target", "i": i})
                 return
         if self._mode == "look_at_target":
             look = self._img_to_widget(self._world_to_img(self._look.reshape(1, 3)))[0]
             if float(np.linalg.norm(pt - look)) < px:
-                self._drag = {"kind": "look"}
+                self._begin_drag({"kind": "look"})
                 return
         if self._mode == "look_forward":
             heads = self._img_to_widget(self._arrow_heads_img())
             d = np.linalg.norm(heads - pt, axis=1)
             i = int(np.argmin(d))
             if d[i] < px:
-                self._drag = {"kind": "arrow", "i": i}
+                self._begin_drag({"kind": "arrow", "i": i})
                 return
         d = np.linalg.norm(wvis - pt, axis=1)
         i = int(np.argmin(d))
         if d[i] < px and i > 0:
-            self._drag = {"kind": "cam", "i": i}
+            self._begin_drag({"kind": "cam", "i": i})
             return
-        self._drag = {"kind": "pan"}
+        self._begin_drag({"kind": "pan"})
+
+    def _begin_drag(self, drag: dict) -> None:
+        self._drag = drag
+        self.grabMouse()
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
         if self._drag is None:
@@ -394,6 +423,7 @@ class GeoCanvas(QWidget):
                 self._last = pos
                 self.update()
             return
+        self._drag_moved = True
         ix, iy = self._widget_to_img(float(pos.x()), float(pos.y()))
         a, b = self._img_to_world_ab(ix, iy)
         if kind == "look":
@@ -404,7 +434,13 @@ class GeoCanvas(QWidget):
             self.knotMoved.emit(int(self._drag["i"]), a, b)
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        kind = None if self._drag is None else self._drag["kind"]
+        moved = self._drag_moved
         self._drag = None
+        self._drag_moved = False
+        self.releaseMouse()
+        if moved and kind in ("cam", "look", "target", "arrow"):
+            self.dragFinished.emit()
 
     def resizeEvent(self, event: QResizeEvent) -> None:
         super().resizeEvent(event)
@@ -433,6 +469,7 @@ class GeoPane(QWidget):
     knotMoved = Signal(int, float, float)
     lookMoved = Signal(float, float)
     lookTargetMoved = Signal(int, float, float)
+    dragFinished = Signal()
 
     def __init__(self, kind: str, title: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -453,6 +490,7 @@ class GeoPane(QWidget):
         self.canvas.knotMoved.connect(self.knotMoved)
         self.canvas.lookMoved.connect(self.lookMoved)
         self.canvas.lookTargetMoved.connect(self.lookTargetMoved)
+        self.canvas.dragFinished.connect(self.dragFinished)
         tools.addWidget(lab)
         tools.addStretch(1)
         tools.addWidget(self.btn_geo)
@@ -488,3 +526,4 @@ class GeoPane(QWidget):
     ) -> None:
         self.canvas.set_knots(knots, look, mode=mode, targets=targets, n_path=n_path)
         self.canvas.set_other_rails(others)
+        self.canvas.update()

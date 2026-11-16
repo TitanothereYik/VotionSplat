@@ -43,7 +43,7 @@ These are the only product facts treated as **locked**. Everything else in the p
 10. **Product name:** Votion 3DGS
 11. **Trainer (amended 2026-10-30, #61):** in-app **LiteGS** backend → `splat.ply`. The dataset is known-pose COLMAP under `worldstereo/dataset` (WorldStereo pinholes plus six gnomonic faces of the 8K pano). Train writes `worldstereo/train`. User picks the density controller **LiteGS** (default) or **MCMC Compact** on the Splat page before Train / Retrain. LiteGS = vendored [MooreThreads/LiteGS](https://github.com/MooreThreads/LiteGS) raster + `DensityControllerTamingGS` with the UI Gaussian budget as `target_primitives`. MCMC Compact = Jung & Hong, *MCMC-Guided Compact 3DGS* (SIGGRAPH Asia 2025 TC, section 3.1 only: Metropolis-Hastings adaptive split threshold + stochastic importance prune). Both share the same Gaussian raster (opacity, anisotropic scale, rotation, SH). ADC / Splat Density is not offered. Continue uses the checkpoint’s controller; switching LiteGS ↔ MCMC Compact requires Retrain. Brush / LichtFeld / Postshot stay “Open in…”. The former gsplat Splat3 / MCMC trainer (locked 2026-09-01) is retired; see 48–56. Live train viewport, Stop, uncapped max steps, and Star camera: see 41–47 (locked 2026-09-05).
 12. **Unreal:** Engine **5.5** + **MLSLabsRenderer** (interim) for `splat.ply` playback — [GitHub](https://github.com/mlslabs/MLSLabsGaussianSplattingRenderer-UE) · [Fab](https://www.fab.com/listings/f91b57cc-958d-40dd-a455-2535bf00e588). Hold an **update slot** for a better UE renderer later.
-13. **Pano inputs (2.0):** three first-class modes on Phase 1 — **(1) 2D Images → ERP (default)**, **(2) 360 Images**, **(3) text → ERP**. Happy path is (1) then Phase 2 splat then Phase 3 WAN.
+13. **Pano inputs (2.0):** three first-class modes on Phase 1 — **(1) 2D Images → ERP (default)**, **(2) 360 Images**, **(3) text → ERP**. Happy path is (1), then MoGe-2 depth, then WorldStereo.
 14. **2D Images surroundings:** user types a sentence **or** local **Florence-2** captions the 2D image (editable). Always append **`no peoples, no cars`** at the end (typed or caption). Empty box still blocks Generate. Florence Hub (measured first successful P1 caption): `florence-community/Florence-2-large` rev `4271c66b88cdbc05735372ec13b2360108de5317`.
 15. **Ostris:** native port **READY** (2026-09-03, pack pin `7756566160c4a1b24bb1bd9f0ff3ced1a83d7547`). 2D Images Generate is enabled. Do **not** shell out to ComfyUI.
 16. **Chrome:** V1 left rail + right viewport + six P0 names as stage chips. Chips **navigate** the six pages. A **job strip** (caption + bar) sits under the chips on every page. **Log** and **Help** are matching bottom drawers (not a Home accordion, not a seventh page).
@@ -94,6 +94,9 @@ These are the only product facts treated as **locked**. Everything else in the p
 61. **WorldStereo is the Quality route (2026-10-30, Yik):** After reviewing `alpine_02`, Yik makes WorldStereo memory-DMD the only Quality generator. The WAN 2.1 14B generator, pano LoRA, LightX2V, ERP HiRes, and SphereSfM code paths are removed. Git history is the only copy. Leftover `colmap/`, `wan/`, `hires/`, and WAN weights on disk are not deleted by the app. Shared Wan 2.1 parts that WorldStereo loads stay: umT5, CLIP-Vision H, the Wan 2.1 VAE, and the 480P Diffusers config. `4x-UltraSharp` stays for pinhole HiRes hole fill. Up to six views per rail (front, back, left, right, up, down), default all six. Default rails are four straight `look_forward` lines. The weights licence is still UNKNOWN (#59). Yik accepts that risk for the **default** route, not only the experiment. Fast and Scout stay disabled. This is not the §8 bake-off.
 62. **Spaced views are the default frame layout (2026-10-30, Yik):** Six full trajectories made generation about six times one view. Spaced keeps each view's camera steady and gives that view only its slot of the 21 rail frames: front, left, right, up, down, back, then repeat. The six runs are interleaved back into one 21-frame rail. A non-front run adds one anchor frame at rail position 0 so the start image is still a pano cut at the origin; that frame is not kept. Separate (a full trajectory per view) stays available. The short-run timing measurement against the 7439 s alpine_02 front trajectory has not been run; it waits until the GPU is free. **Superseded by #63.**
 63. **Joint all-rail generation (2026-11-04, Yik):** One WorldStereo sample covers every kept rail. The default is 10 frames per rail, 40 frames in one pass, out along one rail and back along the next, starting at the star. Per rail (21 front frames each) stays as the other Generate option. Spaced, six-view Separate, the combined preview, per-view exclude, and Dense are removed. 40 keyframes is past the clip this checkpoint was trained on (21). Quality, time, and VRAM for that 40-frame sample are unmeasured; the run waits until the GPU is free. A longer sequence is the same planner with a higher frame cap, chained through the memory bank.
+64. **Geometry-locked WorldStereo (2026-11-10, Yik):** The guide video is a solid mesh from the 2048x1024 MoGe pano depth, textured with the 8K pano, with the ground plane snapped. After each joint chunk, pixels the guide left empty are lifted with aligned MoGe frame depth into a shared layer under worldstereo/world; later chunks render that layer in their guide. HiRes all composites the 8K pano mesh, then the shared layer, then the frame's own WorldStereo pixels, with a feathered seam. Quality, time, and VRAM are unmeasured until Yik runs it.
+65. **Photo paste and one scene depth (2026-11-10, Yik):** After the 8K tail, 2D Images pastes the original photo back with a feathered seam. Panorama depth is one cache under `outputs/<scene>/depth`, keyed by the panorama hash. The default backend is `moge2`, picked by Yik on 2026-11-11 from the alpine bake-off in `tools/depth_bakeoff.py` (ground fit 0.70 vs 0.58 for `moge1`, facade error 0.0042 vs 0.0055, MIT weights). Geometry, Plot Camera, the guide, and HiRes all read that cache. A rail plotted on an older depth must be re-plotted before Generate; the depth key sits beside each rail in `rails/rail_XX.depth_key`, which Start over keeps. Backends other than `moge1` run in their own venvs under `.venvs/` (`tools/depth_backends/install.ps1`). Detect h_fov reads lens EXIF first and falls back to MoGe. Backend licences: MoGe-2 weights MIT, PaGeR weights CC BY-NC (non-commercial), DAP weights under Meta's DINOv3 licence.
+66. **Geometry editor stays local (2026-11-12):** Dragging a rail point or the look target, and switching Active rail, updates the floor and side views only. It does not rebuild Generate or Reconstruct. The rail file is written when Play starts the mesh flight, and again when the active rail changes, without that rebuild. Confirm rails is what refreshes Generate and Reconstruct.
 
 ### Measured on this PC (not guessed)
 
@@ -115,6 +118,9 @@ These are the only product facts treated as **locked**. Everything else in the p
 | alpine_01 LiteGS 10k | 972 SphereSfM views (360² faces + six 2048² pano faces), 2.26M Gaussians at 10k steps, ~3.6 min on the 3090 (~200 it/s at 19k → ~80 it/s at 2.2M), hold-out PSNR 15.6 dB. Single-view overfit reaches 33.8 dB in 600 steps, so the raster + optimizer are sound; the low multi-view PSNR is view inconsistency in the WAN + SphereSfM data (frame 1 alone fits to 30.8 dB, frames 1–3 together only 22.3 dB). | Measured 2026-09-07 |
 | alpine_01 MCMC Compact 10k | 3DGS cadence (75 densify cycles of 100 steps, decay every 2000), MH acceptance 0.43–0.44 (target 0.44), split ratio 3.4–6.8 % per cycle (target 5 %), 19,456 → **510,720** Gaussians (77 % below LiteGS at the same 3M budget), hold-out PSNR **15.7 dB**, 94 s on the 3090 (re-run: 533,120 / 15.5 dB — split sampling is stochastic) (~130 it/s while densifying, ~220 it/s after). Viewport frame: 0 % crushed (<8) / 0 % blown (>247) pixels vs GT. An earlier 24-cycle schedule stalled at 40k because LiteGS drops sub-chunk appends; appends and prunes are now chunk-exact. | Measured 2026-09-07 |
 | alpine_01 cube-face sag | SphereSfM `frame_00000` front PNG ~31 % quadratic line sag; true 90° gnomonic of the same `equirect_hires/frame_00000.png` ~0.2 %. cameras.bin already `SIMPLE_PINHOLE` f=W/2 (90°). | Measured 2026-09-08 |
+| alpine_01 photo paste | 8192×4096 paste of a 70° crop: 3.7 s, about 2 GiB. Pixels outside the feather are unchanged. | Measured 2026-11-11 |
+| alpine_01 depth bake-off | At 2048×1024, scaled to a 0.20 m camera height. Ground fit / facade error / edge match: MoGe v1 0.58 / 0.0055 / 0.39; MoGe-2 0.70 / 0.0042 / 0.44; PaGeR 0.66 / 0.0050 / 0.45; DAP 0.58 / 0.0052 / 0.42. Yik picked MoGe-2. | `outputs/alpine_01/_work/depth_bakeoff/summary.json`, 2026-11-11 |
+| alpine_01 MoGe-2 cache | 4096×2048, 158 s, scale 0.890, 80.7 % valid. A second read from `depth/` was 0.2 s. | Measured 2026-11-11 |
 
 ### Still UNKNOWN (do not fill in)
 
@@ -125,7 +131,7 @@ These are the only product facts treated as **locked**. Everything else in the p
 - Harmonize / UltimateSDUpscale extra widget names (copy arrays from the Krea JSON; name from node source at pin).
 - ~~Exact Florence-2 Hub id / revision.~~ **Measured:** `florence-community/Florence-2-large` @ `4271c66`.
 - ~~Native Ostris Edit port on Windows.~~ **READY 2026-09-03.** Do not shell out to ComfyUI.
-- ~~Disk free space on `D:` for ~45–60 GB models.~~ **Measured 2026-09-01:** 142.3 GB free. Downloader still checks before WAN 14B.
+- ~~Disk free space on `D:` for the model download.~~ **Measured 2026-09-01:** 142.3 GB free. The downloader still checks before the WorldStereo weights.
 - ~~Unreal Engine version / playback plugin~~ **Locked (interim):** UE 5.5 + MLSLabsRenderer. **Update slot open** for a future better renderer.
 
 ---
@@ -144,13 +150,13 @@ These are the only product facts treated as **locked**. Everything else in the p
   → Optional Open in Brush / LichtFeld / Postshot
 ```
 
-**Hard rules from the Mickmumpitz video** ([transcript](https://www.youtube.com/watch?v=eJuYBNrD8HI), not inferred):
+**Hard rules:**
 
-- WAN is capped at 720p / 1440×720 ERP. Structure from Wan is fine; **softness** is the problem. Sharpness is the **8K reprojection trick**, not a bigger video model.
-- **SeedVR** was tried as an upscaler on the Wan views: slow and “didn’t do too much.” It is **not** a sharpness path (P5 experiment only).
-- **All drone rails start from the same origin** (the MoGe star / pano center). That is the only viewpoint that already has the 8K texture, so HiRes can reproject “how every pixel moves.”
-- Mesh control video has **black holes** where the pano never saw. Wan + Matrix-3D LoRA inpaints those holes. Flying **through a wall** is allowed — Wan invents the other side — but the user must **preview the mesh flight** before spending a 14B run.
-- **Four rails is usually enough.** Quality default stays 4. Extra rails buy volume, not per-view fidelity, and do not fix glass. Optional 5th via Add-to-dataset.
+- Quality generation is WorldStereo memory-DMD. Wan 2.1 I2V, Matrix-3D, and LightX2V are not in this build.
+- Sharpness is the 8K panorama through the MoGe-2 mesh. SeedVR is not a sharpness path.
+- **All rails start from the same origin** (the star / pano center). That is the viewpoint that already has the 8K texture.
+- The mesh guide has holes where the panorama never looked. WorldStereo fills them. Preview the mesh flight before Generate.
+- **Four rails is usually enough.** Extra rails buy volume, not per-view fidelity, and do not fix glass. Optional 5th rail.
 - Keep **view-dependent reflections** (Gaussian SH, not a polygon mesh). Marble was rejected for restricted roam **and** dead reflections. Example in the video: a pond that still reflects after splat train.
 - SageAttention is optional for speed; the video also uses the SageAttention **patch to avoid black frames**. If Sage is on, apply that patch. If import fails, run without it (may be slower; watch for black frames).
 
@@ -165,7 +171,7 @@ These are the only product facts treated as **locked**. Everything else in the p
 | NVIDIA Lyra | 91 GB, Linux-only, ~6 min first start |
 | World Labs Marble | Closed source; small roam; **no working reflections** |
 
-**Selected:** Skywork Matrix-3D = MoGe mesh as camera condition + **LoRA on Wan 2.1** (not a new video model). LoRA trained by flying a virtual 360° drone in **UE5** through **500** game worlds. Votion ports that idea natively (SplatKit `core/`), not ComfyUI.
+**Current path:** Krea 2 panorama, MoGe-2 depth, WorldStereo memory-DMD, pinhole HiRes, known-pose COLMAP, LiteGS or MCMC Compact.
 
 **V1 is not upgraded.** HunyuanWorld / WorldFM / the HY-World 2.0 stack stay archived. The only reopen is #58 (standalone WorldStereo, one GPU).
 
@@ -191,44 +197,36 @@ D:\Votion3DGS\
 
 ---
 
-## Model filenames (from the two ComfyUI graphs you attached)
+## Model files (this build)
 
-Filenames and Hugging Face URLs below are copied from the MarkdownNote nodes in:
+Download into `<install_root>\models\`. Hub blobs land in `<install_root>\.hf_cache\`, not `C:\Users\<user>\.cache\huggingface`. Dev default: `D:\Votion3DGS`.
 
-- `d:\AI_3DGS\260825_MICKMUMPITZ_Krea2-360Pano-Creator_1-0.json`
-- `d:\AI_3DGS\260825_MICKMUMPITZ_3DGS-Dataset-Creator_1-0_SMPL.json`
+### Panorama
 
-Sizes are **not** listed unless a source stated them. Download into `<install_root>\models\…` matching Comfy folder names. Hub blobs land in `<install_root>\.hf_cache\` first (same volume as models), not `C:\Users\<user>\.cache\huggingface`. Dev default: `D:\Votion3DGS`.
+| File | Folder | Source |
+|------|--------|--------|
+| `krea2_turbo_fp8_scaled.safetensors` | diffusion_models | [Comfy-Org/Krea-2](https://huggingface.co/Comfy-Org/Krea-2) |
+| `krea2_t2i_360_erp_lora_v1.safetensors` | loras | [Krea2-360-ERP-LoRAs](https://huggingface.co/mickmumpitz/Krea2-360-ERP-LoRAs) |
+| `krea2_oedit_360_erp_outpaint_lora_v1.safetensors` | loras | same repo |
+| `qwen3vl_4b_fp8_scaled.safetensors` | text_encoders | [Comfy-Org/Krea-2](https://huggingface.co/Comfy-Org/Krea-2) |
+| Krea VAE | vae | panorama decode |
+| `RealESRGAN_x2.pth` | upscale_models | [ai-forever/Real-ESRGAN](https://huggingface.co/ai-forever/Real-ESRGAN) |
 
-### Panorama (Phase 1; downloader can fetch in Phase 0)
+The RTX 50xx nvfp4 Krea file is not the 3090 default.
 
-| File | Comfy folder | URL (from workflow note) |
-|------|----------------|---------------------------|
-| `krea2_turbo_fp8_scaled.safetensors` | diffusion_models | [Comfy-Org/Krea-2](https://huggingface.co/Comfy-Org/Krea-2/resolve/main/diffusion_models/krea2_turbo_fp8_scaled.safetensors) |
-| `krea2_t2i_360_erp_lora_v1.safetensors` | loras | [mickmumpitz/Krea2-360-ERP-LoRAs](https://huggingface.co/mickmumpitz/Krea2-360-ERP-LoRAs/resolve/main/krea2_t2i_360_erp_lora_v1.safetensors) |
-| `krea2_oedit_360_erp_outpaint_lora_v1.safetensors` | loras | [same repo](https://huggingface.co/mickmumpitz/Krea2-360-ERP-LoRAs/resolve/main/krea2_oedit_360_erp_outpaint_lora_v1.safetensors) |
-| `qwen3vl_4b_fp8_scaled.safetensors` | text_encoders | [Comfy-Org/Krea-2](https://huggingface.co/Comfy-Org/Krea-2/resolve/main/text_encoders/qwen3vl_4b_fp8_scaled.safetensors) |
-| `wan_2.1_vae.safetensors` | vae | [Comfy-Org Wan 2.1](https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/vae/wan_2.1_vae.safetensors) |
-| `RealESRGAN_x2.pth` | upscale_models | [ai-forever/Real-ESRGAN](https://huggingface.co/ai-forever/Real-ESRGAN/resolve/main/RealESRGAN_x2.pth) |
+### Generate, depth, and HiRes
 
-Optional (workflow note, RTX 50xx): `krea2_turbo_nvfp4.safetensors` — **not** for the 3090 Quality default.
+| File | Role |
+|------|------|
+| `WorldStereo-memory-dmd-fp8_e4m3fn_scaled.safetensors` | [apozz/WorldStereo-fp8](https://huggingface.co/apozz/WorldStereo-fp8) |
+| `dinov2-base` | [facebook/dinov2-base](https://huggingface.co/facebook/dinov2-base) |
+| `umt5_xxl_fp8_e4m3fn_scaled.safetensors` | WorldStereo text encoder |
+| `clip_vision_h.safetensors` | WorldStereo vision encoder |
+| MoGe-2 `Ruicheng/moge-2-vitl-normal` | scene depth |
+| MoGe v1 `Ruicheng/moge-vitl` `model.pt` | Detect, when a photo has no lens data |
+| `4x-UltraSharp.pth` | HiRes holes only |
 
-### Video / dataset (Phase 3)
-
-| File | Comfy folder | URL (from workflow note) |
-|------|----------------|---------------------------|
-| `Wan2_1-I2V-14B-720P_fp8_e4m3fn.safetensors` | diffusion_models | [Kijai/WanVideo_comfy](https://huggingface.co/Kijai/WanVideo_comfy/blob/main/Wan2_1-I2V-14B-720P_fp8_e4m3fn.safetensors) |
-| `pano_video_gen_720p_comfy.safetensors` | loras | [mickmumpitz/Wan2.1-Pano360-LoRA](https://huggingface.co/mickmumpitz/Wan2.1-Pano360-LoRA/blob/main/pano_video_gen_720p_comfy.safetensors) |
-| `lightx2v_T2V_14B_cfg_step_distill_v2_lora_rank64_bf16.safetensors` | loras | [Kijai Lightx2v](https://huggingface.co/Kijai/WanVideo_comfy/blob/main/Lightx2v/lightx2v_T2V_14B_cfg_step_distill_v2_lora_rank64_bf16.safetensors) |
-| `umt5_xxl_fp8_e4m3fn_scaled.safetensors` | text_encoders | [Comfy-Org](https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/blob/main/split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors) |
-| `clip_vision_h.safetensors` | clip_vision | [Comfy-Org](https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/blob/main/split_files/clip_vision/clip_vision_h.safetensors) |
-| `4x-UltraSharp.pth` | upscale_models | [Kim2091/UltraSharp](https://huggingface.co/Kim2091/UltraSharp/blob/main/4x-UltraSharp.pth) |
-
-GGUF alternative (workflow: “16GB or less”; **not** the 3090 Quality default): `wan2.1-i2v-14b-720p-Q4_K_M.gguf` from [city96](https://huggingface.co/city96/Wan2.1-I2V-14B-720P-gguf).
-
-MoGe checkpoint: Hugging Face `Ruicheng/moge-vitl` `model.pt` (SplatKit default). SphereSfM: `colmap_sphere.exe` auto-download from SplatKit `bin/` (SHA verified there — copy that checksum into our downloader; do not invent one).
-
-Florence-2 (Phase 1 auto-caption, optional): Microsoft Florence-2 family, Apache-2.0. Hub (first successful P1 caption): `florence-community/Florence-2-large` rev `4271c66b88cdbc05735372ec13b2360108de5317`. Always append `no peoples, no cars`. Do not invent a quantized fork.
+Florence-2 (optional caption): `florence-community/Florence-2-large` rev `4271c66b88cdbc05735372ec13b2360108de5317`. Always append `no peoples, no cars`.
 
 ---
 
@@ -240,15 +238,12 @@ Florence-2 (Phase 1 auto-caption, optional): Microsoft Florence-2 family, Apache
 | Fast | 16GB class | Not in this build | — | — | Disabled. Do not invent a model name. |
 | Scout | 12GB class | Not in this build | — | — | Disabled. Do not invent a model name. |
 
-Matrix-3D PanoLRM (~80GB in their README) is **out of 2.0**.
-
 ---
 
 ## P5 stretch (not a 2.0 blocker)
 
-- SeedVR2 as an **experiment only**. Video: they upscaled Wan views with it; it was slow and did little. **Do not** substitute it for 8K geometry-mode reprojection.
-- Matrix-3D optimization reconstruction as an advanced alternative to SphereSfM
-- macOS: SplatKit SphereSfM is Windows/Linux only today
+- SeedVR2 as an experiment only. Do not substitute it for the 8K panorama through the mesh.
+- macOS is not supported. This build is Windows.
 
 ---
 

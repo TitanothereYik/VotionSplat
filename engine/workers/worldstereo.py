@@ -65,6 +65,13 @@ def main(argv: list[str] | None = None) -> int:
     if not prompt:
         _log("STATUS // empty prompt blocks Generate")
         return 2
+    from engine.depth.keys import rails_stale
+
+    stale = rails_stale(args.scene)
+    if stale:
+        listed = ", ".join(str(index + 1) for index in stale)
+        _log(f"STATUS // rails were plotted on an older depth: re-plot rails {listed} in Geometry")
+        return 2
 
     mode = str(args.mode or payload.get("mode") or "joint").strip().lower()
     if mode not in {"joint", "rail"}:

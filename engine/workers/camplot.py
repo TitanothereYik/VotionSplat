@@ -89,8 +89,10 @@ def main(argv: list[str] | None = None) -> int:
     if not pano_file.is_file():
         log("STATUS // missing pano.png — run Phase 1 first")
         return 2
+    from engine.depth.defaults import DEPTH_BACKEND
+
     ckpt = moge_ckpt()
-    if not ckpt.is_file():
+    if DEPTH_BACKEND == "moge1" and not ckpt.is_file():
         log("MISSING_moge https://huggingface.co/Ruicheng/moge-vitl/resolve/main/model.pt")
         return 3
 
@@ -127,22 +129,34 @@ def main(argv: list[str] | None = None) -> int:
 
     from core import matrix3d_pipeline as mp
 
-    job_progress(2, 5, "load MoGe")
-    model = mp.get_moge_model(ckpt=str(ckpt), device=device)
+    from engine.depth.scene_depth import depth_at, ensure_scene_depth
+
+    job_progress(2, 5, "scene depth")
+    scene_depth = ensure_scene_depth(args.scene, device)
+    cached_depth, cached_valid = depth_at(scene_depth, (2048, 1024), fill_sky=False)
     job_progress(3, 5, "render mesh flight")
-    res = mp.render_control(
-        pano,
-        movement_mode="straight",
-        movement_range=1.0,
-        angle=0.0,
-        frame_size=int(length),
-        json_path=str(rail_path),
-        scale_mode="absolute_literal",
-        moge_ckpt=str(ckpt),
-        model=model,
-        device=device,
-        moge_level=moge_level,
-    )
+    original_depth = mp.moge_panorama_depth
+
+    def _cached_depth(image_rgb, *args, **kwargs):
+        return cached_depth, cached_valid
+
+    mp.moge_panorama_depth = _cached_depth
+    try:
+        res = mp.render_control(
+            pano,
+            movement_mode="straight",
+            movement_range=1.0,
+            angle=0.0,
+            frame_size=int(length),
+            json_path=str(rail_path),
+            scale_mode="absolute_literal",
+            moge_ckpt=str(ckpt),
+            model=None,
+            device=device,
+            moge_level=moge_level,
+        )
+    finally:
+        mp.moge_panorama_depth = original_depth
     rgb = np.clip(res["rendered_rgb"] * 255.0, 0, 255).astype(np.uint8)
     mask = res["rendered_mask"].astype(np.uint8) * 255
     frames_rgb = [cv2.cvtColor(frame, cv2.COLOR_RGB2BGR) for frame in rgb]
@@ -174,8 +188,12 @@ def main(argv: list[str] | None = None) -> int:
         "mask": mask_rel,
         "anchors": anchors_text,
         "look_at": look_at,
+        "depth_key": scene_depth.key,
     }
     (root / meta_rel).write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    from engine.depth.keys import write_rail_key
+
+    write_rail_key(args.scene, rail_index, scene_depth.key)
     log(f"CAMPLOT\tvideo\t{video_path}")
     log(f"CAMPLOT\tmask\t{mask_path}")
     log(f"STATUS // camplot done {length} frames -> {video_path}")

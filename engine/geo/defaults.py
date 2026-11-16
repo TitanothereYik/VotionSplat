@@ -108,4 +108,5 @@ Active rail solid; others dimmed. Extra rails buy volume, not sharper views, and
 Star is origin, not draggable. look_forward + drag arrow switches that rail to per_point_look.
 Play the mesh flight on the Preview pane before Confirm rails. Confirm gates Generate.
 moge_level 9 is shared (not fps).
+If the depth model changes, re-plot every rail. Generate stays blocked until those flights match the current depth.
 """

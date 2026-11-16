@@ -30,6 +30,6 @@ HELP_RECONSTRUCT = """RECONSTRUCT
 Keep or ditch rails. A ditched rail is left out of the known-pose dataset. The files stay on disk.
 Re-gen resamples that rail's 21-frame front view and marks later rails stale. Joint is one sample, so re-gen there is off; use Generate again or Start over.
 Confirm rails on Geometry first.
-Known poses writes worldstereo/dataset from the keyframes and the poses WorldStereo already used, plus six 90° gnomonic faces of the 8K pano.
+Known poses writes worldstereo/dataset from the active HiRes set and the poses WorldStereo already used. Composite also adds the panorama point cloud and six 90° faces of the 8K pano. WorldStereo upscale uses only those frames.
 Train writes worldstereo/train. Leftover WAN files on disk are ignored.
 """

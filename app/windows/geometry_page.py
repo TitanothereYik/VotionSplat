@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.widgets.geo_view import GeoPane
+from engine.depth.keys import rails_stale
 from engine.geo import defaults as D
 from engine.geo.anchors import format_anchors, format_point, parse_anchors_ext
 from engine.geo.rail import fill_targets, snap_length
@@ -216,6 +217,8 @@ class GeometryPage(QWidget):
         self.side.lookMoved.connect(self._on_side_look)
         self.floor.lookTargetMoved.connect(self._on_floor_look_target)
         self.side.lookTargetMoved.connect(self._on_side_look_target)
+        self.floor.dragFinished.connect(self._on_gizmo_done)
+        self.side.dragFinished.connect(self._on_gizmo_done)
         preview = QWidget()
         preview.setObjectName("previewFlight")
         pv = QVBoxLayout(preview)
@@ -280,6 +283,21 @@ class GeometryPage(QWidget):
             self.pano_thumb.setText("No pano.png — run Phase 1 first")
             self.btn_compute.setEnabled(False)
 
+    def _clear_plates(self) -> None:
+        self.floor.set_ortho(None, [-1.0, -1.0], [1.0, 1.0])
+        self.side.set_ortho(None, [-1.0, -1.0], [1.0, 1.0])
+        self.floor.set_cloud(None, None)
+        self.side.set_cloud(None, None)
+        self._cloud_pts = None
+        self.wall_hint.setText("")
+
+    def release_open_media(self) -> None:
+        """Close the flight video and drop the plates so Start over can delete them."""
+        self._stop_preview()
+        self.preview_frame.clear()
+        self._video_path = None
+        self._clear_plates()
+
     def _set_geo_state(self, on: bool) -> None:
         self._geo_on = on
         self.look_mode.setEnabled(on)
@@ -320,12 +338,12 @@ class GeometryPage(QWidget):
             self.side.set_ortho(side if side.is_file() else None, sv.get("lo", [-1, -1]), sv.get("hi", [1, 1]))
         npz = moge_dir / "cloud.npz"
         if npz.is_file():
-            data = np.load(npz)
-            pts = data["points"]
-            cols = data["colors"]
+            with np.load(npz) as data:
+                pts = np.array(data["points"], copy=True)
+                cols = np.array(data["colors"], copy=True)
             self.floor.set_cloud(pts, cols)
             self.side.set_cloud(pts, cols)
-            self._cloud_pts = np.asarray(pts)
+            self._cloud_pts = pts
         self._set_geo_state(True)
         self._push_gizmos()
         self._sync_confirm()
@@ -350,9 +368,25 @@ class GeometryPage(QWidget):
             self.apply_geometry(str(meta))
             self._restore_preview_pane()
         else:
+            self._clear_plates()
+            self.preview_frame.clear()
+            self._video_path = None
             self._set_geo_state(False)
+            self.preview_hint.setText(
+                "Empty until Compute geometry. Play lives on this pane, not the rail."
+            )
         self.refresh_pano()
+        self._show_stale_rails(scene)
         self.railsChanged.emit()
+
+    def _show_stale_rails(self, scene: str) -> None:
+        stale = rails_stale(scene)
+        if not stale:
+            return
+        listed = ", ".join(str(index + 1) for index in stale)
+        self.preview_hint.setText(
+            f"Rails were plotted on an older depth: re-plot rails {listed} in Geometry."
+        )
 
     def restore_view(self) -> None:
         scene = self._scene_name()
@@ -415,7 +449,7 @@ class GeometryPage(QWidget):
         self._push_rail_to_widgets()
         self._push_gizmos()
         self._sync_rail_count_buttons()
-        self._persist()
+        self._save_editor()
         self._restore_preview_pane()
 
     def _pull_widgets_to_rail(self) -> None:
@@ -436,8 +470,11 @@ class GeometryPage(QWidget):
         self._refresh_origin_warn()
         self._refresh_wall_hint()
 
-    def _persist(self) -> None:
+    def _save_editor(self) -> None:
         save_editor(self._scene_name(), self._rails, int(self.moge_level.value()), self._active)
+
+    def _persist(self) -> None:
+        self._save_editor()
         self.railsChanged.emit()
 
     def _refresh_origin_warn(self) -> None:
@@ -537,7 +574,7 @@ class GeometryPage(QWidget):
             out.append({"knots": knots, "n_path": snap_length(spec.length)})
         return out
 
-    def _push_gizmos(self) -> None:
+    def _push_gizmos(self, *, live: bool = False) -> None:
         spec = self._rail()
         try:
             knots, targets = spec.knots_and_targets()
@@ -549,7 +586,8 @@ class GeometryPage(QWidget):
         others = self._other_rails()
         self.floor.set_knots(knots, look, mode=mode, targets=targets, n_path=n_path, others=others)
         self.side.set_knots(knots, look, mode=mode, targets=targets, n_path=n_path, others=others)
-        self._refresh_wall_hint()
+        if not live:
+            self._refresh_wall_hint()
 
     def _write_anchor_box(self) -> None:
         spec = self._rail()
@@ -616,9 +654,7 @@ class GeometryPage(QWidget):
         knots[index, 0] = x
         knots[index, 2] = z
         spec.anchors = format_anchors(knots, targets, six=spec.orientation == "per_point_look")
-        self._write_anchor_box()
-        self._push_gizmos()
-        self._mark_stale()
+        self._push_gizmos(live=True)
 
     def _on_side_knot(self, index: int, z: float, y: float) -> None:
         spec = self._rail()
@@ -631,9 +667,7 @@ class GeometryPage(QWidget):
         knots[index, 2] = z
         knots[index, 1] = y
         spec.anchors = format_anchors(knots, targets, six=spec.orientation == "per_point_look")
-        self._write_anchor_box()
-        self._push_gizmos()
-        self._mark_stale()
+        self._push_gizmos(live=True)
 
     def _on_floor_look(self, x: float, z: float) -> None:
         spec = self._rail()
@@ -641,9 +675,7 @@ class GeometryPage(QWidget):
         look[0] = x
         look[2] = z
         spec.look_at = format_point(look)
-        self._write_anchor_box()
-        self._push_gizmos()
-        self._mark_stale()
+        self._push_gizmos(live=True)
 
     def _on_side_look(self, z: float, y: float) -> None:
         spec = self._rail()
@@ -651,9 +683,7 @@ class GeometryPage(QWidget):
         look[2] = z
         look[1] = y
         spec.look_at = format_point(look)
-        self._write_anchor_box()
-        self._push_gizmos()
-        self._mark_stale()
+        self._push_gizmos(live=True)
 
     def _on_floor_look_target(self, index: int, x: float, z: float) -> None:
         self._ensure_per_point_look()
@@ -669,9 +699,7 @@ class GeometryPage(QWidget):
         targets[index, 0] = x
         targets[index, 2] = z
         spec.anchors = format_anchors(knots, targets, six=True)
-        self._write_anchor_box()
-        self._push_gizmos()
-        self._mark_stale()
+        self._push_gizmos(live=True)
 
     def _on_side_look_target(self, index: int, z: float, y: float) -> None:
         self._ensure_per_point_look()
@@ -687,9 +715,21 @@ class GeometryPage(QWidget):
         targets[index, 2] = z
         targets[index, 1] = y
         spec.anchors = format_anchors(knots, targets, six=True)
+        self._push_gizmos(live=True)
+
+    def _on_gizmo_done(self) -> None:
+        """Sync the text. Play saves. Release does not rebuild Generate or Reconstruct."""
         self._write_anchor_box()
-        self._push_gizmos()
-        self._mark_stale()
+        self._refresh_origin_warn()
+        self._refresh_wall_hint()
+        spec = self._rail()
+        spec.played = False
+        spec.dirty = True
+        self._sync_confirm()
+        if self._geo_on:
+            self.preview_hint.setText(
+                f"Rail {spec.index + 1} changed. Play the mesh flight on this pane before Confirm rails."
+            )
 
     def _plot_payload(self) -> dict:
         self._pull_widgets_to_rail()
@@ -825,6 +865,7 @@ class GeometryPage(QWidget):
             self.requestJob.emit(["__geo_error__", str(exc)])
             return
         self._pull_widgets_to_rail()
+        self._save_editor()
         self._write_request()
         cached = self._matching_video()
         if cached is not None:
@@ -870,7 +911,7 @@ class GeometryPage(QWidget):
         spec.played = True
         spec.dirty = False
         self._sync_confirm()
-        self._persist()
+        self._save_editor()
         self.btn_play.setEnabled(self._geo_on)
         self.preview_hint.setText(
             f"Playing rail {spec.index + 1} {path.name} (black holes OK). "

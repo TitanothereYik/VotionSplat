@@ -333,7 +333,8 @@ def seed_rails_for_scene(scene: str) -> list[RailSpec]:
     rails = default_rails()
     cloud = root / "moge" / "cloud.npz"
     if cloud.is_file():
-        points = np.load(cloud)["points"]
+        with np.load(cloud) as data:
+            points = np.array(data["points"], copy=True)
         if points.ndim == 2 and points.shape[0] >= 50:
             fit_straight_rails(rails, points)
     return rails

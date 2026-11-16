@@ -12,6 +12,7 @@ build/
 
 # Hugging Face hub + Xet cache (must live on D:, not C:\Users\…\.cache)
 .hf_cache/
+.venvs/
 
 # Weights and scene outputs (downloaded / generated, not source)
 models/**

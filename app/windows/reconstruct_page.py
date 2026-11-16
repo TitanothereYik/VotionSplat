@@ -22,8 +22,15 @@ from engine.geo.rails import (
     set_dataset_rail,
     sync_dataset_from_confirmed,
 )
+from engine.hires.pinhole import (
+    active_choice,
+    choice_matches_dataset,
+    choice_name,
+    dataset_images,
+    hires_ready,
+)
 from engine.pano.scene_io import scene_dir
-from engine.sfm.dataset_source import colmap_root, keyframe_count
+from engine.sfm.dataset_source import colmap_root, keyframe_count, keyframe_paths, view_folders
 
 
 def _lab(text: str) -> QLabel:
@@ -222,13 +229,22 @@ class ReconstructPage(QWidget):
             self.rail_lay.addWidget(block)
 
         kf_ready = sum(1 for idx in kept_rail_indices(scene) if keyframe_count(scene, idx) > 0)
-        self.btn_recon.setEnabled(kf_ready > 0 and not self._sfm_busy)
+        choice = active_choice(root)
+        path_ready = kf_ready > 0 and self._choice_ready(root, choice)
+        self.btn_recon.setEnabled(path_ready and not self._sfm_busy)
+        built = dataset_images(root)
+        name = choice_name(choice)
         if kf_ready == 0:
             self.gate_hint.setText("No kept rail has WorldStereo keyframes yet.")
-        else:
+        elif not path_ready:
+            self.gate_hint.setText(f"Generate is {name}. Press HiRes all on that path before Reconstruct.")
+        elif built and not choice_matches_dataset(choice, built):
             self.gate_hint.setText(
-                f"{kf_ready} kept rail(s) with keyframes. Reconstruct writes worldstereo/dataset."
+                f"Generate is {name}, but the dataset is still {choice_name('frame' if built == 'frame' else 'world')}. "
+                "Reconstruct again before Train."
             )
+        else:
+            self.gate_hint.setText(f"Generate is {name}. Reconstruct writes that set into the dataset.")
         if self._sfm_busy or not load_sparse:
             return
         self.show_latest_sparse(announce=False)
@@ -266,6 +282,14 @@ class ReconstructPage(QWidget):
                 "rail",
             ]
         )
+
+    def _choice_ready(self, root, choice: str) -> bool:
+        for index in kept_rail_indices(self._scene_name()):
+            for folder in view_folders(root, index).values():
+                count = len(keyframe_paths(folder))
+                if count and not hires_ready(folder, choice, count):
+                    return False
+        return True
 
     def _on_reconstruct(self) -> None:
         if not self.btn_recon.isEnabled():

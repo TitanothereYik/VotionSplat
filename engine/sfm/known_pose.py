@@ -11,10 +11,10 @@ deviations are dropped and the fit is repeated. That is the §7.1.2 alignment
 from the HY-World 2.0 paper, in Votion's own code, with MoGe instead of
 WorldMirror.
 
-When ``hires/`` is an upscale of the WorldStereo keyframes and the count
-matches, those frames are the images and the §4.2 intrinsics are scaled to
-that size. A pinhole reprojection of the panorama is not used. This build's
-rails are the 480p keyframes.
+When ``hires/source.txt`` names a complete set, those frames are the images
+and the intrinsics are scaled to that size. ``world`` is the panorama
+composite. ``frame`` is the WorldStereo keyframes upscaled with no composite.
+A pinhole reprojection of the panorama is not used.
 """
 
 from __future__ import annotations
@@ -28,10 +28,18 @@ import cv2
 import numpy as np
 
 from engine.geo.rails import kept_rail_indices
-from engine.hires.pinhole import hires_complete
+from engine.hires.pinhole import (
+    HIRES_FRAME,
+    active_choice,
+    choice_name,
+    hires_frames,
+    hires_ready,
+    use_hires,
+)
 from engine.job import REPO_ROOT, job_progress
 from engine.pano.scene_io import pano_path, scene_dir
 from engine.sfm.dataset_source import keyframe_paths, view_folders, write_source
+from engine.world.depth_align import MIN_INLIERS, align_depth, moge_frame_depth, render_z
 from engine.worldstereo import defaults as D
 from engine.worldstereo.adapter import _moge_cloud, cut_pinhole
 from engine.worldstereo.views import VIEWS
@@ -46,7 +54,6 @@ from tools.colmap_write_model import write_cameras_binary, write_images_binary  
 # One sample per 8 pixels of an aligned depth map. A 480×832 frame then adds
 # at most a few thousand points instead of a dense depth image.
 KEYFRAME_STRIDE = 16
-MIN_INLIERS = 500
 
 # OpenCV cube at the origin. Columns of R_c2w are camera +X, +Y, +Z in the
 # ERP world (image centre is +Z, +Y down). w2c rotation is the transpose.
@@ -84,87 +91,6 @@ def rotmat2qvec(rot: np.ndarray) -> np.ndarray:
     return qvec
 
 
-def render_z(points: np.ndarray, w2c: np.ndarray, K: np.ndarray, height: int, width: int) -> np.ndarray:
-    """Nearest OpenCV camera-z of ``points``. NaN where the cloud missed."""
-    rot = np.asarray(w2c[:3, :3], dtype=np.float64)
-    t = np.asarray(w2c[:3, 3], dtype=np.float64)
-    cam = np.asarray(points, dtype=np.float64) @ rot.T + t
-    z = cam[:, 2]
-    ok = z > 1e-4
-    inv_z = 1.0 / np.maximum(z, 1e-8)
-    u = K[0, 0] * cam[:, 0] * inv_z + K[0, 2]
-    v = K[1, 1] * cam[:, 1] * inv_z + K[1, 2]
-    # Sky-fill and points behind the camera make u/v non-finite or huge.
-    # Cast only the pixels that can land in the frame.
-    in_frame = (
-        np.isfinite(u)
-        & np.isfinite(v)
-        & (u >= -1.0)
-        & (u < width + 1)
-        & (v >= -1.0)
-        & (v < height + 1)
-    )
-    ui = np.zeros(u.shape[0], dtype=np.int32)
-    vi = np.zeros(v.shape[0], dtype=np.int32)
-    if np.any(in_frame):
-        ui[in_frame] = np.rint(u[in_frame]).astype(np.int32)
-        vi[in_frame] = np.rint(v[in_frame]).astype(np.int32)
-    ok &= in_frame & (ui >= 0) & (ui < width) & (vi >= 0) & (vi < height)
-    depth = np.full(height * width, np.nan, dtype=np.float32)
-    if not np.any(ok):
-        return depth.reshape(height, width)
-    ui = ui[ok]
-    vi = vi[ok]
-    z = z[ok]
-    order = np.argsort(z, kind="mergesort")
-    lin = vi[order].astype(np.int64) * width + ui[order].astype(np.int64)
-    z = z[order]
-    _uniq, first = np.unique(lin, return_index=True)
-    depth[lin[first]] = z[first].astype(np.float32)
-    return depth.reshape(height, width)
-
-
-def align_depth(z_render: np.ndarray, z_pred: np.ndarray) -> tuple[float, float, np.ndarray, float] | None:
-    """``z_render ≈ scale * z_pred + shift`` on pixels the cloud hit.
-
-    Returns scale, shift, inlier mask, and the median relative residual.
-    """
-    valid = np.isfinite(z_render) & np.isfinite(z_pred) & (z_render > 1e-3) & (z_pred > 1e-3)
-    idx = np.flatnonzero(valid.ravel())
-    if idx.size < MIN_INLIERS:
-        return None
-    zr = z_render.ravel()[idx].astype(np.float64)
-    zp = z_pred.ravel()[idx].astype(np.float64)
-
-    def fit(sel: np.ndarray) -> tuple[float, float]:
-        design = np.stack([zp[sel], np.ones(sel.size)], axis=1)
-        scale, shift = np.linalg.lstsq(design, zr[sel], rcond=None)[0]
-        return float(scale), float(shift)
-
-    chosen = np.arange(idx.size)
-    scale, shift = fit(chosen)
-    if not np.isfinite(scale) or scale <= 0.0:
-        return None
-    resid = np.abs(scale * zp + shift - zr)
-    med = float(np.median(resid))
-    mad = float(np.median(np.abs(resid - med)))
-    thresh = med + 3.0 * 1.4826 * max(mad, 1e-8)
-    keep = resid <= thresh
-    if int(keep.sum()) < MIN_INLIERS:
-        return None
-    scale, shift = fit(np.flatnonzero(keep))
-    if not np.isfinite(scale) or scale <= 0.0:
-        return None
-    resid = np.abs(scale * zp + shift - zr)
-    keep = resid <= thresh
-    if int(keep.sum()) < MIN_INLIERS:
-        return None
-    inlier = np.zeros(z_render.size, dtype=bool)
-    inlier[idx[keep]] = True
-    rel = float(np.median(resid[keep] / np.maximum(zr[keep], 1e-8)))
-    return scale, shift, inlier.reshape(z_render.shape), rel
-
-
 def frame_name(index: int, view: str, frame_i: int) -> str:
     return f"rail_{int(index):02d}_{view}_f{int(frame_i):03d}.png"
 
@@ -195,12 +121,19 @@ def _camera_key(K: np.ndarray, width: int, height: int) -> tuple:
     )
 
 
-def _frame_choice(rail: Path) -> tuple[list[Path], str]:
+def _frame_choice(rail: Path, source: str) -> tuple[list[Path], str]:
+    """Images for the Generate-tab path. No silent fall back to the other set or to 480p."""
     keyframes = keyframe_paths(rail)
-    if keyframes and hires_complete(rail, len(keyframes)):
-        hires = sorted((rail / "hires").glob("[0-9][0-9][0-9].png"))
-        return hires, "hires"
-    return keyframes, "keyframes"
+    if not keyframes:
+        return [], ""
+    label = choice_name(source)
+    if not hires_ready(rail, source, len(keyframes)):
+        raise RuntimeError(
+            f"{rail.parent.name}/{rail.name} has no {label} HiRes. "
+            "On Generate, choose that path and press HiRes all."
+        )
+    use_hires(rail, source)
+    return hires_frames(rail, source), "hires"
 
 
 def _cube_w2c() -> list[tuple[str, np.ndarray]]:
@@ -228,15 +161,6 @@ def _write_points(path: Path, xyz: np.ndarray, rgb: np.ndarray) -> None:
         handle.write(blob.tobytes())
 
 
-def _moge_frame_depth(model, rgb: np.ndarray, fov_x_deg: float):
-    import torch
-
-    image = torch.tensor(rgb, dtype=torch.float32, device=next(model.parameters()).device).permute(2, 0, 1) / 255.0
-    out = model.infer(image, fov_x=float(fov_x_deg), resolution_level=9, apply_mask=True)
-    depth = out["depth"].detach().float().cpu().numpy()
-    return depth
-
-
 def build(scene: str, device: str = "cuda:0") -> dict:
     root = scene_dir(scene)
     pano_file = pano_path(scene)
@@ -248,6 +172,7 @@ def build(scene: str, device: str = "cuda:0") -> dict:
     erp = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
 
     kept = kept_rail_indices(scene)
+    choice = active_choice(root)
     rails: list[tuple[int, str, Path, list[Path], str]] = []
     for index in kept:
         folders = view_folders(root, index)
@@ -258,7 +183,7 @@ def build(scene: str, device: str = "cuda:0") -> dict:
             folder = folders.get(view)
             if folder is None:
                 continue
-            frames, kind = _frame_choice(folder)
+            frames, kind = _frame_choice(folder, choice)
             if not frames:
                 print(f"STATUS // rail {index} {view} has no keyframes — skipped", flush=True)
                 continue
@@ -268,6 +193,9 @@ def build(scene: str, device: str = "cuda:0") -> dict:
             rails.append((index, view, folder, frames, kind))
     if not rails:
         raise RuntimeError(f"no kept WorldStereo keyframes under {root / 'worldstereo' / 'rails'}")
+    # WorldStereo upscale: the dataset is those frames. The panorama cloud is
+    # only the scale reference, and the six pano cube faces stay out.
+    frame_only = choice == HIRES_FRAME
 
     out = dataset_dir(scene)
     if out.exists():
@@ -278,11 +206,11 @@ def build(scene: str, device: str = "cuda:0") -> dict:
     sparse.mkdir(parents=True)
 
     print(
-        f"STATUS // known-pose {len(rails)} rail(s), MoGe cloud then per-keyframe alignment",
+        f"STATUS // known-pose {len(rails)} rail(s), images={'frame' if frame_only else 'composite'}",
         flush=True,
     )
     job_progress(0, len(rails) + 2, "known-pose MoGe cloud")
-    cloud_xyz, cloud_rgb = _moge_cloud(erp, device)
+    cloud_xyz, cloud_rgb = _moge_cloud(scene, erp, device)
     cloud_rgb_u8 = np.clip(np.rint(np.asarray(cloud_rgb) * 255.0), 0, 255).astype(np.uint8)
 
     cameras: dict[int, Camera] = {}
@@ -351,7 +279,7 @@ def build(scene: str, device: str = "cuda:0") -> dict:
             image_id += 1
 
             fov_x = float(np.degrees(2.0 * np.arctan((width / 2.0) / float(K[0, 0]))))
-            z_pred = _moge_frame_depth(moge, rgb, fov_x)
+            z_pred = moge_frame_depth(moge, rgb, fov_x)
             if z_pred.shape != (height, width):
                 raise RuntimeError(f"MoGe depth {z_pred.shape} does not match {name} {(height, width)}")
             z_hat = render_z(cloud_xyz, w2c, K, height, width)
@@ -393,31 +321,38 @@ def build(scene: str, device: str = "cuda:0") -> dict:
     moge.to("cpu")
     torch.cuda.empty_cache()
 
-    face = max(2, int(erp.shape[1] // 4))
-    cube_k = np.array(
-        [[face / 2.0, 0.0, face / 2.0], [0.0, face / 2.0, face / 2.0], [0.0, 0.0, 1.0]],
-        dtype=np.float64,
-    )
-    for name, w2c in _cube_w2c():
-        cut = cut_pinhole(erp, w2c, cube_k, face, face)
-        fname = f"cube_{name}.png"
-        cv2.imwrite(str(image_dir / fname), cv2.cvtColor(cut, cv2.COLOR_RGB2BGR))
-        images[image_id] = Image(
-            id=image_id,
-            qvec=rotmat2qvec(w2c[:3, :3]),
-            tvec=np.zeros(3, dtype=np.float64),
-            camera_id=camera_id(cube_k, face, face),
-            name=fname,
-            xys=np.zeros((0, 2), dtype=np.float64),
-            point3D_ids=np.zeros((0,), dtype=np.int64),
+    face = 0
+    if not frame_only:
+        face = max(2, int(erp.shape[1] // 4))
+        cube_k = np.array(
+            [[face / 2.0, 0.0, face / 2.0], [0.0, face / 2.0, face / 2.0], [0.0, 0.0, 1.0]],
+            dtype=np.float64,
         )
-        image_id += 1
+        for name, w2c in _cube_w2c():
+            cut = cut_pinhole(erp, w2c, cube_k, face, face)
+            fname = f"cube_{name}.png"
+            cv2.imwrite(str(image_dir / fname), cv2.cvtColor(cut, cv2.COLOR_RGB2BGR))
+            images[image_id] = Image(
+                id=image_id,
+                qvec=rotmat2qvec(w2c[:3, :3]),
+                tvec=np.zeros(3, dtype=np.float64),
+                camera_id=camera_id(cube_k, face, face),
+                name=fname,
+                xys=np.zeros((0, 2), dtype=np.float64),
+                point3D_ids=np.zeros((0,), dtype=np.int64),
+            )
+            image_id += 1
 
-    parts_xyz = [cloud_xyz.astype(np.float32)]
-    parts_rgb = [cloud_rgb_u8]
+    parts_xyz: list[np.ndarray] = []
+    parts_rgb: list[np.ndarray] = []
+    if not frame_only:
+        parts_xyz.append(cloud_xyz.astype(np.float32))
+        parts_rgb.append(cloud_rgb_u8)
     if extra_xyz:
         parts_xyz.extend(extra_xyz)
         parts_rgb.extend(extra_rgb)
+    if not parts_xyz:
+        raise RuntimeError("known-pose produced no points")
     xyz = np.concatenate(parts_xyz, axis=0)
     rgb = np.concatenate(parts_rgb, axis=0)
     finite = np.isfinite(xyz).all(axis=1)
@@ -436,7 +371,8 @@ def build(scene: str, device: str = "cuda:0") -> dict:
         "num_images": len(images),
         "num_points": int(xyz.shape[0]),
         "num_rails": len(rails),
-        "cube_faces": len(_CUBE_ORDER),
+        "images": "frame" if frame_only else "composite",
+        "cube_faces": 0 if frame_only else len(_CUBE_ORDER),
         "cube_size": face,
         "keyframe_stride": KEYFRAME_STRIDE,
         "point_triangulator": "not run",

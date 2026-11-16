@@ -184,7 +184,7 @@ Fallback if PyTorch3D will not build on Windows: `engine/worldstereo/render.py`,
 
 ### 4.5 Generation worker
 
-`engine.workers.worldstereo`, one process for the whole scene, because the memory bank lives across rails and views. Generate resumes. Start over clears `worldstereo/rails` and `worldstereo/memory` after a confirmation.
+`engine.workers.worldstereo`, one process for the whole scene, because the memory bank lives across rails and views. Generate resumes. Start over closes the open preview, then clears `worldstereo/rails`, `worldstereo/memory`, `worldstereo/joint`, `worldstereo/input`, `worldstereo/world`, `moge`, `control`, and `depth` after a confirmation. The panorama and the rail layout stay.
 
 1. Load once: text encoder pass, CLIP pass, unload; FP8 DiT; VAE; DINOv2.
 2. Initialise the memory bank from the pano perspective cuts and the MoGe cloud. On resume, restore the snapshot written by the last finished trajectory.
@@ -223,6 +223,14 @@ WorldStereo frames are ~0.4 MP. The Phase 3 rule still holds: sharpness comes fr
 - Log mean coverage. Not a ship gate.
 
 The ERP HiRes worker is removed. Git history is the only copy.
+
+**2026-11-10.** The guide video is a solid mesh from the 2048x1024 MoGe panorama depth, textured with the 8K panorama, with the ground plane snapped. After each joint chunk, pixels the guide left empty are lifted with aligned MoGe frame depth into a shared layer under `worldstereo/world`; later chunks render that layer in their guide. HiRes all composites the 8K pano mesh, then the shared layer, then the frame's own WorldStereo pixels, with a feathered seam.
+
+**2026-11-10.** The guide mask stays binary. Thin covered streaks beside holes are removed, holes are grown, and the guide colour is feathered into an inpaint so the sample fills a region instead of a line. Panorama depth comes from the shared `depth/` cache.
+
+**2026-11-11.** Yik picked MoGe-2 as `DEPTH_BACKEND`. Alpine bake-off at 2048×1024, scaled to a 0.20 m camera height: ground fit / facade error / edge match were MoGe v1 0.58 / 0.0055 / 0.39, MoGe-2 0.70 / 0.0042 / 0.44, PaGeR 0.66 / 0.0050 / 0.45, DAP 0.58 / 0.0052 / 0.42. MoGe-2 weights are MIT. PaGeR weights are CC BY-NC. The cache is 4096×2048 (158 s on alpine, then 0.2 s to read back). Geometry, Plot Camera, the guide, and HiRes all read it. A rail whose `rails/rail_XX.depth_key` does not match the cache is stale, and Generate exits until that rail is re-plotted. Start over keeps `rails/`.
+
+**2026-11-12.** Dragging a rail point and switching Active rail do not rebuild Generate or Reconstruct. Play writes the rail file, then renders the mesh flight. Confirm rails is the refresh.
 
 ### 4.7 Known-pose dataset
 
