@@ -1,4 +1,4 @@
-"""Launch the native Votion 3DGS window. The Qt process does not import torch."""
+"""Launch the native Votion 3DGS window. The Qt process stays free of torch."""
 
 from __future__ import annotations
 

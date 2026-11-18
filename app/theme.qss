@@ -396,3 +396,14 @@ QSlider::handle:horizontal {
   width: 12px;
   margin: -5px 0;
 }
+
+/* HY pages: nothing may render black on navy */
+QLabel { color: #c9d4e3; }
+QCheckBox { color: #f0f0f0; spacing: 6px; }
+QCheckBox:disabled { color: #5b6b82; }
+QCheckBox::indicator { width: 13px; height: 13px; border: 1px solid #4da3ff; background: #081018; }
+QCheckBox::indicator:checked { background: #ff9f30; border-color: #ff9f30; }
+QListWidget { background: #081018; color: #c9d4e3; border: 1px solid #1c2b3a; outline: 0; }
+QListWidget::item:selected { background: #ff9f30; color: #0b1623; }
+QListWidget::indicator { width: 12px; height: 12px; border: 1px solid #4da3ff; background: #081018; }
+QListWidget::indicator:checked { background: #4da3ff; }

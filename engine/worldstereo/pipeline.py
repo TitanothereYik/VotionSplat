@@ -113,7 +113,10 @@ def _materialize_rope(rope) -> None:
     rope.freqs_sin = real.freqs_sin
 
 
-def build_dit(transformer_cfg: Path, ws_cfg_path: Path, weights: Path, device: torch.device):
+def build_dit(
+    transformer_cfg: Path, ws_cfg_path: Path, weights: Path, device: torch.device, load_device=None
+):
+    """``load_device`` is where the weights are put. ``None`` puts them on ``device``."""
     from omegaconf import OmegaConf
 
     from engine.worldstereo.fp8 import load_scaled_fp8_dit
@@ -140,8 +143,9 @@ def build_dit(transformer_cfg: Path, ws_cfg_path: Path, weights: Path, device: t
         _materialize_rope(model.controlnet_rope)
     _log(f"STATUS // loading FP8 DiT {weights.name}")
     torch.cuda.reset_peak_memory_stats(device)
-    stats = load_scaled_fp8_dit(model, weights, device)
-    model.to(device)
+    target = device if load_device is None else torch.device(load_device)
+    stats = load_scaled_fp8_dit(model, weights, target)
+    model.to(target)
     model.eval()
     _log(
         f"STATUS // fp8_linear={stats['fp8_linear']} bf16_linear={stats['bf16_linear']} "

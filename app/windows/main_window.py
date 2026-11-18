@@ -28,12 +28,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.windows.generate_page import GeneratePage
-from app.windows.geometry_page import GeometryPage
+from app.windows.dataset_page import DatasetPage
+from app.windows.expand_page import ExpandPage
+from app.windows.hy_splat_page import HySplatPage
 from app.windows.panorama_page import PanoramaPage
-from app.windows.reconstruct_page import ReconstructPage
-from app.windows.splat_page import SplatPage
-from engine.geo.defaults import HELP_GEOMETRY
+from app.windows.traj_page import TrajPage
+from engine.hyworld.argv import expand_argv, export_argv, hires_argv, stage_argv, train_loop_argv
+from engine.hyworld.defaults import HELP_DATASET, HELP_EXPAND, HELP_SPLAT, HELP_TRAJECTORIES
+from engine.hyworld.paths import gs_result, hy_root, latest_checkpoint, votion_dir
 from engine.job import (
     REPO_ROOT,
     camplot_argv,
@@ -53,21 +55,18 @@ from engine.job import (
 from engine.pano.defaults import HELP_PANORAMA
 from engine.pano.scene_io import scene_dir
 from engine.splat.status import litegs_spike_ok
-from engine.sfm.defaults import HELP_RECONSTRUCT
-from engine.splat.defaults import HELP_SPLAT
-from engine.worldstereo.defaults import HELP_GENERATE
 
 STAGES = (
     "Home",
     "Panorama",
-    "Geometry",
-    "Generate",
-    "Reconstruct",
+    "Trajectories",
+    "Expand",
+    "Dataset",
     "Splat",
 )
 
 HELP_HOME = """FIELD GUIDE
-2D Images (default) or 360 / text → 8K ERP → Compute geometry → rails → Generate → splat.ply (LiteGS or MCMC Compact).
+2D Images (default) or 360 / text → 8K ERP → Plan trajectories → Expand → dataset → splat.
 Ostris blocks 2D Generate until READY. h_fov 70. text keeps the trigger prefix.
 After 2D Images, prompt.txt = outpaint instruction + surroundings. Generate strips that green instruction.
 Preview the mesh flight. Four straight rails usually enough. Do not skip 8K. Extra rails do not fix glass.
@@ -306,6 +305,13 @@ class MainWindow(QMainWindow):
         self._florence_hub = ""
         self._florence_rev = ""
         self._job_label = ""
+        self._stop_asked = False
+        self._job_log = None
+        self._ext_log: Path | None = None
+        self._ext_pos = 0
+        self._ext_buf = ""
+        self._ext_step = ""
+        self._ext_ready = False
         self._sfm_images = "0"
         self._sfm_points = "0"
         self._sfm_sparse = ""
@@ -338,6 +344,11 @@ class MainWindow(QMainWindow):
         self._set_live("idle")
         self._refresh_status()
         self._append_log(LOG_IDLE)
+        self._ext_timer = QTimer(self)
+        self._ext_timer.setInterval(2000)
+        self._ext_timer.timeout.connect(self._follow_external_expand)
+        self._ext_timer.start()
+        QTimer.singleShot(0, self._follow_external_expand)
 
     def _build_brand(self) -> QWidget:
         bar = QWidget()
@@ -401,27 +412,20 @@ class MainWindow(QMainWindow):
         self.pano_page.requestJob.connect(self._on_pano_job)
         self.pano_page.requestStop.connect(self._stop_job)
         self.pages.addWidget(self.pano_page)
-        self.geo_page = GeometryPage(lambda: self.scene.text())
-        self.geo_page.requestJob.connect(self._on_geo_job)
-        self.geo_page.requestStop.connect(self._stop_job)
-        self.pages.addWidget(self.geo_page)
-        self.gen_page = GeneratePage(
-            lambda: self.scene.text(),
-            self.geo_page.generate_unlocked,
-            release_media=self.geo_page.release_open_media,
-            after_clear=self.geo_page.try_load_existing,
-        )
-        self.gen_page.requestJob.connect(self._on_gen_job)
-        self.gen_page.requestStop.connect(self._stop_job)
-        self.geo_page.railsChanged.connect(self.gen_page.refresh)
-        self.pages.addWidget(self.gen_page)
-        self.recon_page = ReconstructPage(lambda: self.scene.text())
-        self.recon_page.requestJob.connect(self._on_recon_job)
-        self.recon_page.requestStop.connect(self._stop_job)
-        self.geo_page.railsChanged.connect(self.recon_page.refresh)
-        self.pages.addWidget(self.recon_page)
-        self.splat_page = SplatPage(lambda: self.scene.text())
-        self.splat_page.requestJob.connect(self._on_splat_job)
+        self.traj_page = TrajPage(lambda: self.scene.text())
+        self.traj_page.requestJob.connect(self._on_traj_job)
+        self.traj_page.requestStop.connect(self._stop_job)
+        self.pages.addWidget(self.traj_page)
+        self.expand_page = ExpandPage(lambda: self.scene.text())
+        self.expand_page.requestJob.connect(self._on_expand_job)
+        self.expand_page.requestStop.connect(self._stop_job)
+        self.pages.addWidget(self.expand_page)
+        self.dataset_page = DatasetPage(lambda: self.scene.text())
+        self.dataset_page.requestJob.connect(self._on_dataset_job)
+        self.dataset_page.requestStop.connect(self._stop_job)
+        self.pages.addWidget(self.dataset_page)
+        self.splat_page = HySplatPage(lambda: self.scene.text())
+        self.splat_page.requestJob.connect(self._on_splat_request)
         self.splat_page.requestStop.connect(self._stop_job)
         self.splat_page.controlLine.connect(self._on_splat_control)
         self.splat_page.logLine.connect(self._append_log)
@@ -557,6 +561,7 @@ class MainWindow(QMainWindow):
         self.log.setProperty("class", "logPane")
         self.log.setMinimumHeight(90)
         self.log.setMaximumHeight(168)
+        self.log.document().setMaximumBlockCount(5000)
         self.btn_log.toggled.connect(self.log.setVisible)
         log_col.addWidget(self.btn_log)
         log_col.addWidget(self.log, 1)
@@ -593,15 +598,15 @@ class MainWindow(QMainWindow):
         elif name == "Panorama":
             self.help.setPlainText(HELP_PANORAMA)
             self.pano_page.restore_view()
-        elif name == "Geometry":
-            self.help.setPlainText(HELP_GEOMETRY)
-            self.geo_page.restore_view()
-        elif name == "Generate":
-            self.help.setPlainText(HELP_GENERATE)
-            self.gen_page.restore_view()
-        elif name == "Reconstruct":
-            self.help.setPlainText(HELP_RECONSTRUCT)
-            self.recon_page.refresh()
+        elif name == "Trajectories":
+            self.help.setPlainText(HELP_TRAJECTORIES)
+            self.traj_page.restore_view()
+        elif name == "Expand":
+            self.help.setPlainText(HELP_EXPAND)
+            self.expand_page.restore_view()
+        elif name == "Dataset":
+            self.help.setPlainText(HELP_DATASET)
+            self.dataset_page.refresh()
         elif name == "Splat":
             self.help.setPlainText(HELP_SPLAT)
             self.splat_page.refresh()
@@ -637,7 +642,7 @@ class MainWindow(QMainWindow):
         fatal = _stops_the_job(body)
         cursor = self.log.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.End)
-        if self.log.toPlainText():
+        if not self.log.document().isEmpty():
             cursor.insertBlock()
         block = QTextBlockFormat()
         char = QTextCharFormat()
@@ -746,8 +751,9 @@ class MainWindow(QMainWindow):
                 return
             msg = parts[5] if len(parts) > 5 else ""
             self.job_strip.set_progress(current, total, pct, msg)
-            if self._job_label in ("wan", "hires", "worldstereo") and hasattr(self, "gen_page"):
-                self.gen_page.set_job_progress(current, total, pct, msg)
+            page = self._hy_page(self._job_label)
+            if page is not None:
+                page.on_progress(self._job_label, current, total, pct, msg)
             return
         file_id = parts[1]
         cell = self._stat_cells.get(file_id)
@@ -814,13 +820,13 @@ class MainWindow(QMainWindow):
             return
         if raw.startswith("GEO\t"):
             parts = raw.split("\t")
-            if len(parts) >= 3 and parts[1] == "json":
+            if len(parts) >= 3 and parts[1] == "json" and hasattr(self, "geo_page"):
                 self.geo_page.apply_geometry(parts[2])
             self._append_log(raw)
             return
         if raw.startswith("CAMPLOT\t"):
             parts = raw.split("\t")
-            if len(parts) >= 3:
+            if len(parts) >= 3 and hasattr(self, "geo_page"):
                 self.geo_page.apply_camplot(parts[1], parts[2])
             self._append_log(raw)
             return
@@ -839,7 +845,8 @@ class MainWindow(QMainWindow):
             pts = int(getattr(self, "_sfm_points", "0") or 0)
             # Counts only while SphereSfM is still exiting. Viewport loads in
             # on_sfm_finished so it always reads the files this run just wrote.
-            self.recon_page.apply_sfm(imgs, pts, "", getattr(self, "_sfm_preview", ""))
+            if hasattr(self, "recon_page"):
+                self.recon_page.apply_sfm(imgs, pts, "", getattr(self, "_sfm_preview", ""))
             self._append_log(raw)
             return
         if raw.startswith("SPLAT\t"):
@@ -870,6 +877,14 @@ class MainWindow(QMainWindow):
                 elif kind == "inputs":
                     self.gen_page.refresh(keep_preview=True)
             self._append_log(raw)
+            return
+        if raw.startswith("HY\t"):
+            parts = raw.split("\t")
+            page = self._hy_page(self._job_label)
+            if page is not None:
+                page.on_hy_line(parts)
+            if len(parts) > 1 and parts[1] in ("warn", "aligned"):
+                self._append_log(raw)
             return
         if raw.startswith("STATUS //") and self._job_running():
             self.job_strip.set_caption(raw)
@@ -1011,6 +1026,25 @@ class MainWindow(QMainWindow):
     # 10-step telemetry (step / loss / psnr / its / vram / fps / gaussians) stays in the
     # HUD; the log drawer gets controller events, checkpoints, exports, errors, state.
     _SPLAT_LOG_KINDS = ("ctl", "ckpt", "ply", "error", "state", "strategy", "budget", "shm")
+    _HY_LABELS = ("hy_plan", "hy_render", "hy_expand", "hy_align", "hy_hires", "hy_gsdata", "hy_train", "hy_export")
+    _HY_OWNER = {"hy_plan": "traj_page", "hy_render": "traj_page", "hy_expand": "expand_page",
+                 "hy_align": "expand_page", "hy_hires": "expand_page", "hy_gsdata": "dataset_page",
+                 "hy_train": "splat_page", "hy_export": "splat_page"}
+
+    def _hy_pages(self) -> list:
+        names = ("traj_page", "expand_page", "dataset_page", "splat_page")
+        return [getattr(self, name) for name in names if hasattr(self, name)]
+
+    def _hy_page(self, label: str):
+        name = self._HY_OWNER.get(label)
+        return getattr(self, name, None) if name else None
+
+    def _start_hy(self, argv: list[str], label: str) -> bool:
+        if not self._start_job(argv, label):
+            return False
+        for page in self._hy_pages():
+            page.on_job_started(label)
+        return True
 
     def _log_splat_line(self, parts: list[str], raw: str) -> None:
         kind = parts[1] if len(parts) > 1 else ""
@@ -1027,7 +1061,7 @@ class MainWindow(QMainWindow):
     def _on_splat_control(self, line: str) -> None:
         """Splat page -> active splat worker stdin (VIEW / PAUSE / RESUME)."""
         proc = None
-        if self._job_running() and self._job_label == "splat":
+        if self._job_running() and self._job_label in ("splat", "hy_train"):
             proc = self._proc
         elif self._splat_view_running():
             proc = self._splat_view_proc
@@ -1064,16 +1098,14 @@ class MainWindow(QMainWindow):
         self._splat_view_stopping = False
 
     def _ensure_splat_view(self) -> None:
+        if not hasattr(self, "splat_page"):
+            return
         if not self._want_splat_view or self._job_running() or self._splat_view_running():
             return
-        if not litegs_spike_ok():
-            return
         scene = self.scene.text()
-        ckpt = scene_dir(scene) / "checkpoints" / "splat_latest.pt"
-        if not ckpt.is_file():
+        if latest_checkpoint(scene) is None:
             return
-        strategy = self.splat_page.strategy_key() if hasattr(self, "splat_page") else "litegs"
-        argv = splat_argv(scene, strategy, "view")
+        argv = stage_argv("view_ckpt", ["--result_dir", str(gs_result(scene)).replace("\\", "/")])
         proc = QProcess(self)
         proc.setWorkingDirectory(str(REPO_ROOT))
         proc.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
@@ -1105,9 +1137,7 @@ class MainWindow(QMainWindow):
                 self.splat_page.on_splat_line(parts)
                 if parts[1:2] != ["fps"]:
                     self._log_splat_line(parts, raw)
-            elif raw.startswith("STATUS //") and (
-                "view" in raw or "Retrain" in raw or "failed" in raw or "skipped" in raw or "reload" in raw
-            ):
+            elif raw.startswith("STATUS //") or "Error" in raw or raw.startswith("Traceback"):
                 self._append_log(raw)
 
     def _on_splat_view_finished(self, _code: int, _status: QProcess.ExitStatus) -> None:
@@ -1155,6 +1185,86 @@ class MainWindow(QMainWindow):
         if self._start_job(argv, "splat"):
             self.splat_page.on_worker_started("train")
 
+    def _on_traj_job(self, args: list) -> None:
+        kind = args[0] if args else ""
+        scene = args[1] if len(args) > 1 else self.scene.text()
+        root = str(hy_root(scene))
+        if kind == "__hy_plan__":
+            head = ["--scene", scene, "--scene-type", (args[2] if len(args) > 2 else "") or "auto"]
+            if len(args) > 3 and args[3] == "1":
+                head.append("--fresh")
+            flags = [str(a) for a in args[4:]]
+            self._start_hy(stage_argv("traj_generate", ["--target_path", root, *flags], head), "hy_plan")
+        elif kind == "__hy_render__":
+            self._start_hy(stage_argv("traj_render", ["--target_path", root]), "hy_render")
+
+    def _on_expand_job(self, args: list) -> None:
+        kind = args[0] if args else ""
+        scene = args[1] if len(args) > 1 else self.scene.text()
+        if kind == "__hy_hires__":
+            from engine.hyworld.hires import PYTHON
+
+            if not PYTHON.is_file():
+                self._append_log(f"STATUS // HiRes needs {PYTHON}")
+                return
+            only = args[2] if len(args) > 2 else ""
+            restart = len(args) > 3 and args[3] == "1"
+            level = args[4] if len(args) > 4 else "auto"
+            try:
+                scale = int(args[5]) if len(args) > 5 else 2
+            except ValueError:
+                scale = 2
+            self._start_hy(
+                hires_argv(scene, only=only, resume=not restart, level=level, scale=scale), "hy_hires"
+            )
+            return
+        if kind == "__hy_align__":
+            self._start_hy(stage_argv("align_bank", ["--target_path", str(hy_root(scene))]), "hy_align")
+            return
+        only = args[2] if len(args) > 2 else ""
+        restart = len(args) > 3 and args[3] == "1"
+        level = args[4] if len(args) > 4 else "auto"
+        self._start_hy(expand_argv(scene, only=only, resume=not restart, level=level), "hy_expand")
+
+    def _on_dataset_job(self, args: list) -> None:
+        scene = args[1] if len(args) > 1 else self.scene.text()
+        self._start_hy(
+            stage_argv("gen_gs_data", [
+                "--root_path", str(hy_root(scene)), "--save_normal", "--split_sky",
+                "--pano_density_mult", args[2] if len(args) > 2 else "2",
+                "--polar_up_density_mult", args[3] if len(args) > 3 else "4",
+            ]),
+            "hy_gsdata",
+        )
+
+    def _on_splat_request(self, args: list) -> None:
+        kind = args[0] if args else ""
+        scene = args[1] if len(args) > 1 else self.scene.text()
+        if kind == "__hy_export__":
+            self._start_hy(export_argv(scene, args[2] if len(args) > 2 else "unreal"), "hy_export")
+        elif kind == "__hy_train__":
+            self._on_hy_train(args)
+        elif kind == "__hy_train_continue__":
+            scene = args[1] if len(args) > 1 else self.scene.text()
+            self._start_hy(train_loop_argv(scene, cont=True), "hy_train")
+
+    def _kill_tree(self, proc: QProcess) -> None:
+        subprocess.run(
+            ["taskkill", "/PID", str(proc.processId()), "/T", "/F"],
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        proc.kill()
+
+    def _on_hy_train(self, args: list) -> None:
+        scene = args[1] if len(args) > 1 else self.scene.text()
+        try:
+            count = max(100, int(args[2])) if len(args) > 2 else 8000
+        except ValueError:
+            count = 8000
+        mesh = len(args) > 3 and args[3] == "1"
+        difix = len(args) > 4 and args[4] == "1"
+        self._start_hy(train_loop_argv(scene, steps=count, mesh=mesh, difix=difix), "hy_train")
+
     def _show_stage(self, name: str) -> None:
         if name not in STAGES:
             return
@@ -1166,12 +1276,12 @@ class MainWindow(QMainWindow):
     def _on_scene(self, _text: str) -> None:
         if hasattr(self, "pano_page"):
             self.pano_page.restore_view()
-        if hasattr(self, "geo_page"):
-            self.geo_page.try_load_existing()
-        if hasattr(self, "gen_page"):
-            self.gen_page.refresh()
-        if hasattr(self, "recon_page"):
-            self.recon_page.refresh()
+        if hasattr(self, "traj_page"):
+            self.traj_page.refresh()
+        if hasattr(self, "expand_page"):
+            self.expand_page.refresh()
+        if hasattr(self, "dataset_page"):
+            self.dataset_page.refresh()
         if hasattr(self, "splat_page"):
             self.splat_page.refresh()
         self._stop_splat_view()
@@ -1225,6 +1335,8 @@ class MainWindow(QMainWindow):
         proc.errorOccurred.connect(self._on_proc_error)
         self._proc = proc
         self._job_label = label
+        self._stop_asked = False
+        self._open_job_log(label)
         program, args = argv[0], argv[1:]
         self._set_live(label)
         self._expect_kill = False
@@ -1237,6 +1349,9 @@ class MainWindow(QMainWindow):
         if self._proc is None:
             return
         data = bytes(self._proc.readAllStandardOutput()).decode("utf-8", errors="replace")
+        if self._job_log is not None:
+            self._job_log.write(data.replace("\r\n", "\n"))
+            self._job_log.flush()
         self._out_buf += data.replace("\r\n", "\n").replace("\r", "\n")
         while "\n" in self._out_buf:
             line, self._out_buf = self._out_buf.split("\n", 1)
@@ -1247,7 +1362,27 @@ class MainWindow(QMainWindow):
             return
         self._append_log(f"STATUS // stopped — process error {error.name}")
 
+    def _open_job_log(self, label: str) -> None:
+        self._close_job_log()
+        if not label.startswith("hy_"):
+            return
+        try:
+            folder = votion_dir(self.scene.text()) / "logs"
+            folder.mkdir(parents=True, exist_ok=True)
+            self._job_log = open(folder / f"{label}.log", "w", encoding="utf-8", errors="replace")
+        except OSError:
+            self._job_log = None
+
+    def _close_job_log(self) -> None:
+        if self._job_log is not None:
+            try:
+                self._job_log.close()
+            except OSError:
+                pass
+            self._job_log = None
+
     def _on_proc_finished(self, code: int, status: QProcess.ExitStatus) -> None:
+        self._close_job_log()
         if self._out_buf:
             self._handle_worker_line(self._out_buf)
             self._out_buf = ""
@@ -1269,29 +1404,157 @@ class MainWindow(QMainWindow):
         self.job_strip.set_idle()
         self._refresh_status()
         self._proc = None
-        if hasattr(self, "gen_page"):
-            self.gen_page.on_job_finished(label, code, more=False)
-        if hasattr(self, "recon_page") and label in ("worldstereo", "pinhole_hires"):
-            self.recon_page.refresh()
-        if hasattr(self, "geo_page"):
-            self.geo_page.on_job_finished(label, code)
-        if label in ("sfm", "known_pose") and hasattr(self, "recon_page"):
-            self.recon_page.on_sfm_finished(code)
-        if label == "litegs":
-            self._refresh_litegs_hint()
-        if hasattr(self, "splat_page"):
-            if label == "splat":
-                self.splat_page.on_worker_finished()
-            self.splat_page.refresh()
+        if label in self._HY_LABELS:
+            for page in self._hy_pages():
+                page.on_job_finished(label, 1 if cancelled else code)
         self._ensure_splat_view()
+
+    def _external_expand_log(self) -> Path | None:
+        found = list((REPO_ROOT / "outputs").glob("*/hyworld/_votion/logs/hy_expand_kept.log"))
+        if not found:
+            return None
+        return max(found, key=lambda path: path.stat().st_mtime)
+
+    def _follow_external_expand(self) -> None:
+        """Show an expand job that was started outside this window."""
+        if self._job_running():
+            return
+        path = self._external_expand_log()
+        if path is None:
+            return
+        if path != self._ext_log:
+            self._ext_log = path
+            self._ext_pos = 0
+            self._ext_buf = ""
+            self._ext_step = ""
+            self._ext_ready = False
+        if not self._ext_ready:
+            self._post_external_expand(path)
+            self._ext_ready = True
+            self._ext_pos = path.stat().st_size
+            return
+        size = path.stat().st_size
+        if size < self._ext_pos:
+            self._ext_pos = 0
+        if size > self._ext_pos:
+            with path.open("r", encoding="utf-8", errors="replace") as handle:
+                handle.seek(self._ext_pos)
+                self._ext_buf += handle.read()
+                self._ext_pos = handle.tell()
+            while "\n" in self._ext_buf:
+                line, self._ext_buf = self._ext_buf.split("\n", 1)
+                self._post_external_line(line)
+        self._post_external_step(path.with_name("hy_expand_kept.err"))
+
+    def _post_external_expand(self, path: Path) -> None:
+        scene = path.parents[3].name
+        if hasattr(self, "scene") and self.scene.text().strip() != scene:
+            self.scene.setText(scene)
+        text = path.read_text(encoding="utf-8", errors="replace")
+        lines = [raw.strip() for raw in text.splitlines() if raw.strip()]
+        if lines and lines[-1].startswith("STATUS // hyworld expand done"):
+            self._append_log("STATUS // the saved expand log already finished")
+            return
+        order: list[str] = []
+        state: dict[str, str] = {}
+        lines_for_page: list[str] = []
+        for raw in text.splitlines():
+            if not raw.startswith("HY\t"):
+                continue
+            parts = raw.split("\t")
+            if len(parts) < 4 or parts[1] != "state":
+                if len(parts) > 1 and parts[1] == "queue":
+                    lines_for_page.append(raw)
+                continue
+            ident, kind = parts[2], parts[3]
+            if ident not in state:
+                order.append(ident)
+            if kind == "done" and len(parts) > 5:
+                try:
+                    state[ident] = f"done  {float(parts[4]) / 60.0:.0f} min  {parts[5]} GB"
+                except ValueError:
+                    state[ident] = "done"
+            else:
+                state[ident] = kind
+            lines_for_page.append(raw)
+        page = self.expand_page
+        page.on_job_started("hy_expand")
+        for raw in lines_for_page:
+            page.on_hy_line(raw.split("\t"))
+        self._set_live("hy_expand")
+        self.job_strip.set_busy("hy_expand", "expand kept paths")
+        self._append_log("STATUS // expand kept paths is running. This window is following its log.")
+        for ident in order:
+            self._append_log(f"STATUS // {ident}  {state[ident]}")
+        self._post_external_step(path.with_name("hy_expand_kept.err"))
+
+    def _post_external_line(self, raw: str) -> None:
+        line = raw.rstrip("\r")
+        if not line or line.startswith("STATUS // UMT5") or line.startswith("STATUS // text encoder"):
+            return
+        if line.startswith("HY\t"):
+            parts = line.split("\t")
+            self.expand_page.on_hy_line(parts)
+            if len(parts) > 3 and parts[1] == "state":
+                extra = ""
+                if parts[3] == "done" and len(parts) > 5:
+                    try:
+                        extra = f"  {float(parts[4]) / 60.0:.0f} min  {parts[5]} GB"
+                    except ValueError:
+                        extra = ""
+                self._append_log(f"STATUS // {parts[2]}  {parts[3]}{extra}")
+                if parts[3] == "done":
+                    self.job_strip.set_caption(f"done {parts[2]}")
+            return
+        if line.startswith("PROGRESS\t"):
+            self._job_label = "hy_expand"
+            self._handle_progress_line(line)
+            if not self._job_running():
+                self._job_label = ""
+            return
+        if line.startswith("STATUS // hyworld expand done"):
+            self.expand_page.on_job_finished("hy_expand", 0)
+            self._set_live("idle")
+            self.job_strip.set_idle()
+        if line.startswith("STATUS //"):
+            self._append_log(line)
+
+    def _post_external_step(self, err: Path) -> None:
+        if not err.is_file():
+            return
+        text = err.read_text(encoding="utf-8", errors="replace").replace("\r", "\n")
+        steps = [part.strip() for part in text.splitlines() if "%|" in part]
+        step = steps[-1] if steps else ""
+        if not step or step == self._ext_step:
+            return
+        self._ext_step = step
+        self._append_log(f"STATUS // {step}")
+        self.job_strip.set_caption(step)
 
     def _stop_job(self) -> None:
         if not self._job_running() or self._proc is None:
-            self._append_log("STATUS // idle (nothing to stop)")
+            if self._ext_ready and self.live.text() == "hy_expand":
+                self._append_log("STATUS // this expand is running outside the window, so Stop does not end it")
+            else:
+                self._append_log("STATUS // idle (nothing to stop)")
+            return
+        if self._job_label == "hy_train" and not self._stop_asked:
+            self._stop_asked = True
+            self._append_log("STATUS // saving a checkpoint, then stopping. Press Stop again to kill now.")
+            self._proc.write(b"STOP\n")
+            QTimer.singleShot(90000, self._kill_if_stop_asked)
             return
         self._expect_kill = True
         self._append_log("STATUS // cancel — killing subprocess")
-        self._proc.kill()
+        if self._job_label == "hy_train":
+            self._kill_tree(self._proc)
+        else:
+            self._proc.kill()
+
+    def _kill_if_stop_asked(self) -> None:
+        if self._stop_asked and self._job_running() and self._job_label == "hy_train" and self._proc is not None:
+            self._expect_kill = True
+            self._kill_tree(self._proc)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         self._want_splat_view = False

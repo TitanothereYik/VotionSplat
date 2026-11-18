@@ -32,12 +32,13 @@ _HUD_PLATE = QColor(6, 12, 20, 170)
 _HUD_TEXT = QColor(214, 224, 236)
 _HUD_DIM = QColor(139, 155, 180)
 _BADGE = {
-    "TRAINING": QColor(46, 160, 92),
-    "PAUSED": QColor(214, 158, 46),
-    "VIEW": QColor(70, 120, 200),
+    "TRAINING": QColor(255, 159, 48),
+    "PAUSED": QColor(139, 155, 180),
+    "VIEW": QColor(77, 163, 255),
     "LOADING": QColor(120, 120, 140),
     "IDLE": QColor(90, 100, 120),
-    "DONE": QColor(70, 120, 200),
+    "DONE": QColor(77, 163, 255),
+    "SAVING": QColor(255, 159, 48),
 }
 
 

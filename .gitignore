@@ -38,3 +38,10 @@ vendor/litegs/**
 vendor/litegs_build/**
 vendor/worldstereo/**
 !vendor/worldstereo/.gitkeep
+vendor/seedvr2/**
+!vendor/seedvr2/.gitkeep
+vendor/difix3d/**
+!vendor/difix3d/.gitkeep
+
+# Downloaded vendor archives. The extracted source is under vendor/.
+_hy_fetch/
