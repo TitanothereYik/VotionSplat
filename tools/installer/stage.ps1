@@ -15,6 +15,7 @@ $excludeDirs = @(
     "$Root\_hy_fetch",
     "$Root\.pycache_tmp",
     "$Root\docs",
+    "$Root\models",
     "$Root\site_mockup",
     "$Root\unreal",
     "$Root\.venvs\wheels",
