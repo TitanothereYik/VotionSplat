@@ -9,6 +9,10 @@ QMainWindow, QWidget#root {
   font-size: 12px;
 }
 
+QWidget#appBanner {
+  background: #000000;
+}
+
 QWidget#brandBar {
   background-color: #122031;
   border-bottom: 2px solid #ff9f30;

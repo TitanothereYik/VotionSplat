@@ -7,7 +7,16 @@ import subprocess
 from pathlib import Path
 
 from PySide6.QtCore import QProcess, QProcessEnvironment, Qt, QTimer, Signal
-from PySide6.QtGui import QCloseEvent, QColor, QFont, QPixmap, QTextBlockFormat, QTextCharFormat, QTextCursor
+from PySide6.QtGui import (
+    QCloseEvent,
+    QColor,
+    QFont,
+    QPainter,
+    QPixmap,
+    QTextBlockFormat,
+    QTextCharFormat,
+    QTextCursor,
+)
 from PySide6.QtWidgets import (
     QButtonGroup,
     QComboBox,
@@ -21,6 +30,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QRadioButton,
     QSpinBox,
+    QSizePolicy,
     QSplitter,
     QStackedWidget,
     QTextEdit,
@@ -290,6 +300,31 @@ class JobStrip(QWidget):
         self.pct.setText(f"{min(100, max(0, pct))}%")
 
 
+class AppBanner(QWidget):
+    """Full-width wordmark at the top of the window. The art is 1920x250."""
+
+    def __init__(self, pixmap: QPixmap):
+        super().__init__()
+        self.setObjectName("appBanner")
+        self._pix = pixmap
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.fit(1180)
+
+    def fit(self, width: int) -> None:
+        if self._pix.isNull() or self._pix.width() == 0 or width <= 0:
+            self.setFixedHeight(0)
+            return
+        self.setFixedHeight(max(1, round(width * self._pix.height() / self._pix.width())))
+
+    def paintEvent(self, _event) -> None:
+        if self._pix.isNull() or self.width() <= 0 or self.height() <= 0:
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+        painter.drawPixmap(self.rect(), self._pix)
+        painter.end()
+
+
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
@@ -327,6 +362,7 @@ class MainWindow(QMainWindow):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
+        outer.addWidget(self._build_app_banner())
         outer.addWidget(self._build_brand())
         outer.addWidget(self._build_stages())
         self.job_strip = JobStrip()
@@ -351,28 +387,28 @@ class MainWindow(QMainWindow):
         self._ext_timer.start()
         QTimer.singleShot(0, self._follow_external_expand)
 
+    def _build_app_banner(self) -> QWidget:
+        path = Path(__file__).resolve().parents[1] / "assets" / "banner.png"
+        pixmap = QPixmap(str(path)) if path.is_file() else QPixmap()
+        self._app_banner = AppBanner(pixmap)
+        return self._app_banner
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        if hasattr(self, "_app_banner"):
+            self._app_banner.fit(self.width())
+
     def _build_brand(self) -> QWidget:
         bar = QWidget()
         bar.setObjectName("brandBar")
         row = QHBoxLayout(bar)
         row.setContentsMargins(10, 8, 10, 8)
-        from app.version import APP_NAME
-
-        banner = Path(__file__).resolve().parents[1] / "assets" / "banner.png"
-        if banner.is_file():
-            title = QLabel()
-            title.setObjectName("brandBanner")
-            title.setPixmap(QPixmap(str(banner)).scaledToHeight(64, Qt.SmoothTransformation))
-        else:
-            title = QLabel(APP_NAME)
-            title.setObjectName("brandTitle")
         self.live = QLabel("idle")
         self.live.setObjectName("liveBadge")
         self.gpu_chip = QLabel(self._gpu_label())
         self.gpu_chip.setObjectName("metaChip")
         self.idx_chip = QLabel("GPU 0")
         self.idx_chip.setObjectName("metaChip")
-        row.addWidget(title)
         row.addWidget(self.live)
         row.addStretch(1)
         row.addWidget(self.gpu_chip)

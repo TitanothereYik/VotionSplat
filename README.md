@@ -1,4 +1,4 @@
-<p align="center"><img src="app/assets/banner.png" alt="VotionSplat" width="100%"></p>
+<p align="center"><img src="app/assets/repo_banner.png" alt="VotionSplat" width="100%"></p>
 
 # VotionSplat 3.0
 

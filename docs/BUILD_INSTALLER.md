@@ -29,10 +29,12 @@ That script rebuilds the icon, runs `tools\installer\stage.ps1`, then Inno Setup
 
 Install once to `D:\VotionSplat_test` and read `install_check.log`. Every line should be PASS.
 
-## Icon and banner
+## Icon and banners
 
-The placeholders are `app\assets\icon.png` (1024×1024) and `app\assets\banner.png` (1600×400).
+`tools\make_brand_assets.py` copies the finished art when `Logo_and_Banners` is present:
 
-1. Replace those two PNGs with the finished art. Keep the sizes.
-2. Run `.venv\Scripts\python.exe tools\make_brand_assets.py`. It rebuilds `app\assets\icon.ico`.
-3. Commit the three files and rebuild the installer. The in-app banner is the PNG scaled to 64 px on the dark bar (`#122031`).
+- `votion-logo-091-rounded.png` becomes `app\assets\icon.png` and `icon.ico`.
+- `VotionSplat_Banner_Long.png` becomes `app\assets\banner.png`, full width at the top of the window.
+- `votion-banner-seed-2.png` becomes `app\assets\repo_banner.png` for the GitHub page, and the installer welcome image.
+
+Run `.venv\Scripts\python.exe tools\make_brand_assets.py`, commit `app\assets`, and rebuild the installer.

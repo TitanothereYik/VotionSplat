@@ -7,4 +7,4 @@
 - The old trainer, geometry, reconstruct, and depth bake-off paths are removed.
 - Home downloads the models the current pipeline uses. SAM 3 ships in the installer. Other models download on first run.
 - Company installs use the Inno Setup package: Python 3.12, four environments, and the prebuilt CUDA extensions.
-- Icon and banner files are placeholders until the finished art replaces them.
+- The window icon, the top-of-window banner, and the GitHub and installer banner are the finished art.
