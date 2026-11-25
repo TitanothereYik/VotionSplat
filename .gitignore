@@ -60,4 +60,7 @@ unreal/validation/scenes/*.ply
 unreal/**/Content/Validation/*.uasset
 
 # VotionSplat has its own git repository.
-unreal/VotionSplatHost/Plugins/VotionSplat/
+unreal/VotionSplatHost/Plugins/VotionSplat-UnrealPlugin/
+
+# The public mockup is its own repository.
+site_mockup/

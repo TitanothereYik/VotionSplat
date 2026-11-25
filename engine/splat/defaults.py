@@ -127,10 +127,10 @@ COLOR_SPACE_CHOICES = (
     (COLOR_SPACE_LINEAR, "Linear Rec.709, tagged (other engines)"),
 )
 VOTION_UE_SETUP = (
-    "Unreal / VotionSplat Export: drag splat.ply into the Content Browser with the Votion Splat plugin. "
+    "Unreal / VotionSplat Export: drag splat.ply into the Content Browser with VotionSplat-UnrealPlugin. "
     "No settings. The file keeps the trained splats, and the plugin draws them with the same rule as this viewport."
 )
-# VotionSplat plugin header. The file is trained colour, unsoftened; the plugin rasterises it.
+# VotionSplat-UnrealPlugin header. The file is trained colour, unsoftened; the plugin rasterises it.
 VOTION_TAG_VERSION = 1
 VOTION_RASTERS = ("gsplat_antialiased", "gsplat_classic", "litegs_classic")
 GSPLAT_NEAR_PLANE = 0.01

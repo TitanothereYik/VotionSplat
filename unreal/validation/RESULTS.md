@@ -22,7 +22,7 @@ HY export uses `.venv\Scripts\python.exe` (`engine/hyworld/argv.py` `export_argv
 
 ## Phase 2
 
-- Inverse view LUT: N=65 failed the 0.5-level check (97.6% of samples). N=129 passed: 99.70% within 0.5 level, mean 0.036 levels, max 9.59 levels. File: `Plugins/VotionSplat/Resources/VotionSplat_InverseView.bin`.
+- Inverse view LUT: N=65 failed the 0.5-level check (97.6% of samples). N=129 passed: 99.70% within 0.5 level, mean 0.036 levels, max 9.59 levels. File: `Plugins/VotionSplat-UnrealPlugin/Resources/VotionSplat_InverseView.bin`.
 - gsplat references for all 11 synthetic PLYs wrote `unreal/validation/refs/<name>/{main,side}.npy`.
 - T1 main bright centroid is (959.5, 539.5), argmax pixel (959, 539). T2 main centroid is (1343.5, 347.5), argmax (1344, 347).
 

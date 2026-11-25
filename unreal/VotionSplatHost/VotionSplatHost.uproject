@@ -2,7 +2,7 @@
 	"FileVersion": 3,
 	"EngineAssociation": "5.5",
 	"Category": "",
-	"Description": "Host project for the Votion Splat plugin.",
+	"Description": "Host project for VotionSplat-UnrealPlugin.",
 	"Modules": [
 		{
 			"Name": "VotionSplatHost",
@@ -11,7 +11,7 @@
 		}
 	],
 	"Plugins": [
-		{ "Name": "VotionSplat", "Enabled": true },
+		{ "Name": "VotionSplat-UnrealPlugin", "Enabled": true },
 		{ "Name": "PythonScriptPlugin", "Enabled": true },
 		{ "Name": "EditorScriptingUtilities", "Enabled": true },
 		{ "Name": "OpenColorIO", "Enabled": true },

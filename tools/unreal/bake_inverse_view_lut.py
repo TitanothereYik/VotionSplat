@@ -1,7 +1,7 @@
 """Bake a 3D LUT from display sRGB back to linear Rec.709 through the inverse ACES SDR view.
 
 The shader samples this LUT, then applies the Rec.709-to-working matrix. Output:
-    unreal/VotionSplatHost/Plugins/VotionSplat/Resources/VotionSplat_InverseView.bin
+    unreal/VotionSplatHost/Plugins/VotionSplat-UnrealPlugin/Resources/VotionSplat_InverseView.bin
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from pathlib import Path
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_OUT = ROOT / "unreal" / "VotionSplatHost" / "Plugins" / "VotionSplat" / "Resources" / "VotionSplat_InverseView.bin"
+DEFAULT_OUT = ROOT / "unreal" / "VotionSplatHost" / "Plugins" / "VotionSplat-UnrealPlugin" / "Resources" / "VotionSplat_InverseView.bin"
 
 
 def _transform(ocio, config, display: str, view: str, direction):
