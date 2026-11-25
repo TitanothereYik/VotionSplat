@@ -33,8 +33,8 @@ Install once to `D:\VotionSplat_test` and read `install_check.log`. Every line s
 
 `tools\make_brand_assets.py` copies the finished art when `Logo_and_Banners` is present:
 
-- `votion-logo-091-rounded.png` becomes `app\assets\icon.png` and `icon.ico`.
+- `votion-logo-091-rounded.png` is only the icon: `app\assets\icon.png`, `icon.ico`, the window, and the shortcuts.
 - `VotionSplat_Banner_Long.png` becomes `app\assets\banner.png`, full width at the top of the window.
-- `votion-banner-seed-2.png` becomes `app\assets\repo_banner.png` for the GitHub page, and the installer welcome image.
+- `votion-banner-seed-2.png` becomes `app\assets\repo_banner.png` for the GitHub page. The installer welcome panel uses that same banner scaled down so the whole image fits.
 
 Run `.venv\Scripts\python.exe tools\make_brand_assets.py`, commit `app\assets`, and rebuild the installer.

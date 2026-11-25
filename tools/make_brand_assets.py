@@ -20,7 +20,6 @@ BANNER = ASSETS / "banner.png"
 REPO_BANNER = ASSETS / "repo_banner.png"
 ICO = ASSETS / "icon.ico"
 WIZARD = ASSETS / "installer_wizard.png"
-SMALL = ASSETS / "installer_small.png"
 # Inno's welcome panel keeps a 164:314 frame. 534x1022 is the 250% size.
 WIZARD_SIZE = (534, 1022)
 
@@ -42,18 +41,18 @@ def _write_ico() -> None:
 
 
 def _write_wizard() -> None:
+    """Fit the wide banner inside the welcome panel. The square icon is not used here."""
     banner = Image.open(REPO_BANNER).convert("RGB")
     canvas = Image.new("RGB", WIZARD_SIZE, (0, 0, 0))
-    width = WIZARD_SIZE[0]
+    margin = 28
+    width = WIZARD_SIZE[0] - margin * 2
     height = max(1, round(width * banner.height / banner.width))
+    if height > WIZARD_SIZE[1] - margin * 2:
+        height = WIZARD_SIZE[1] - margin * 2
+        width = max(1, round(height * banner.width / banner.height))
     fitted = banner.resize((width, height), Image.Resampling.LANCZOS)
-    canvas.paste(fitted, (0, (WIZARD_SIZE[1] - height) // 2))
+    canvas.paste(fitted, ((WIZARD_SIZE[0] - width) // 2, (WIZARD_SIZE[1] - height) // 2))
     canvas.save(WIZARD)
-
-
-def _write_small() -> None:
-    image = Image.open(ICON).convert("RGBA")
-    image.resize((164, 164), Image.Resampling.LANCZOS).save(SMALL)
 
 
 def _copy_mockup() -> None:
@@ -70,9 +69,8 @@ def main() -> int:
     _take(SOURCES / "votion-banner-seed-2.png", REPO_BANNER)
     _write_ico()
     _write_wizard()
-    _write_small()
     _copy_mockup()
-    for path in (ICON, BANNER, REPO_BANNER, ICO, WIZARD, SMALL):
+    for path in (ICON, BANNER, REPO_BANNER, ICO, WIZARD):
         print(f"{path.name} {path.stat().st_size}")
     return 0
 
