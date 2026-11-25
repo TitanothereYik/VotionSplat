@@ -3,8 +3,8 @@ param(
     [Parameter(Mandatory = $true)][string]$AppDir
 )
 $ErrorActionPreference = "Stop"
-$home = Join-Path $AppDir "runtime\python312"
-$python = Join-Path $home "python.exe"
+$pyHome = Join-Path $AppDir "runtime\python312"
+$python = Join-Path $pyHome "python.exe"
 if (-not (Test-Path -LiteralPath $python)) {
     throw "runtime Python is missing: $python"
 }
@@ -16,7 +16,7 @@ foreach ($rel in $venvs) {
         throw "pyvenv.cfg is missing: $cfg"
     }
     $values = @{
-        "home"       = $home
+        "home"       = $pyHome
         "executable" = $python
         "command"    = "$python -m venv $dir"
     }
