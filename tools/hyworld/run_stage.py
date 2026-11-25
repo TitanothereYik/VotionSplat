@@ -133,7 +133,51 @@ def _inject_openai() -> None:
     sys.modules["openai"] = fake
 
 
+def _enable_cupy_wheels() -> None:
+    """Point CuPy at the pip CUDA wheels when the machine has no CUDA Toolkit."""
+    if os.environ.get("VOTIONSPLAT_NO_DEV_TOOLS") != "1":
+        toolkit = Path(os.environ.get("CUDA_PATH", ""))
+        if (toolkit / "bin" / "nvcc.exe").is_file():
+            return
+    site = Path(sys.prefix) / "Lib" / "site-packages" / "nvidia"
+    nvrtc_bin = site / "cuda_nvrtc" / "bin"
+    runtime_bin = site / "cuda_runtime" / "bin"
+    if not nvrtc_bin.is_dir():
+        return
+    root = Path(sys.prefix) / "cuda_wheel"
+    bindir = root / "bin"
+    incdir = root / "include"
+    bindir.mkdir(parents=True, exist_ok=True)
+    incdir.mkdir(parents=True, exist_ok=True)
+    for folder in (nvrtc_bin, runtime_bin):
+        if not folder.is_dir():
+            continue
+        for src in folder.iterdir():
+            if not src.is_file():
+                continue
+            dest = bindir / src.name
+            if not dest.exists():
+                os.link(src, dest)
+    for folder in (site / "cuda_nvrtc" / "include", site / "cuda_runtime" / "include"):
+        if not folder.is_dir():
+            continue
+        for src in folder.rglob("*"):
+            if not src.is_file():
+                continue
+            dest = incdir / src.relative_to(folder)
+            if dest.exists():
+                continue
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            os.link(src, dest)
+    os.environ["CUDA_PATH"] = str(root)
+    os.environ["PATH"] = str(bindir) + os.pathsep + os.environ.get("PATH", "")
+    if hasattr(os, "add_dll_directory"):
+        os.add_dll_directory(str(bindir))
+    print("STATUS // CuPy using the bundled CUDA runtime", flush=True)
+
+
 def _prepare_env(stage: str) -> None:
+    _enable_cupy_wheels()
     os.environ["PYTHONUTF8"] = "1"
     os.environ["PYTHONIOENCODING"] = "utf-8"
     os.environ["MPLBACKEND"] = "Agg"

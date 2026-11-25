@@ -27,7 +27,7 @@ def main() -> int:
     site = Path(sys.prefix) / "Lib" / "site-packages"
     world = Path(sys.prefix) / "worldgen"
     os.environ["RECAST_PATH"] = str(REPO / "vendor" / "recastnavigation")
-    os.environ["TORCH_CUDA_ARCH_LIST"] = "8.6"
+    os.environ["TORCH_CUDA_ARCH_LIST"] = "8.6;8.9;12.0+PTX"
     os.environ.setdefault("MAX_JOBS", "6")
     os.environ["TORCH_EXTENSIONS_DIR"] = str(Path(sys.prefix) / "torch_extensions")
     os.environ["DISTUTILS_USE_SDK"] = "1"

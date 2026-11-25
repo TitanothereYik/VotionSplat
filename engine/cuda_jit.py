@@ -75,9 +75,14 @@ _VCVARS_SKIP = ("PYTHONHOME", "PYTHONPATH", "VIRTUAL_ENV")
 _CUDA_MATH_HEADERS = ("cusparse.h", "cublas_v2.h", "cublasLt.h", "cusolverDn.h")
 
 
+def dev_tools_skipped() -> bool:
+    """Company machines have no CUDA Toolkit and no Visual Studio."""
+    return os.environ.get("VOTIONSPLAT_NO_DEV_TOOLS") == "1"
+
+
 def msvc_cl_dir() -> Path | None:
     """Hostx64 cl.exe directory, or None if Build Tools are missing."""
-    if os.name != "nt" or not _MSVC_ROOT.is_dir():
+    if dev_tools_skipped() or os.name != "nt" or not _MSVC_ROOT.is_dir():
         return None
     hits = sorted(_MSVC_ROOT.glob("*/bin/Hostx64/x64/cl.exe"))
     return hits[-1].parent if hits else None
@@ -85,6 +90,8 @@ def msvc_cl_dir() -> Path | None:
 
 def apply_cuda_path() -> str:
     """Put CUDA 12.8 on PATH before vcvars / gsplat JIT. No torch import."""
+    if dev_tools_skipped():
+        return "CUDA_PATH: skipped (VOTIONSPLAT_NO_DEV_TOOLS)"
     if not (_CUDA_ROOT / "bin" / "nvcc.exe").is_file():
         return f"CUDA_PATH: missing {_CUDA_ROOT}"
     os.environ["CUDA_PATH"] = str(_CUDA_ROOT)
@@ -99,6 +106,8 @@ def _has_math_headers(include_dir: Path) -> bool:
 
 def apply_cuda_math_headers() -> str:
     """Append a sibling 12.x toolkit include dir to INCLUDE when 12.8 lacks the math headers."""
+    if dev_tools_skipped():
+        return "cuda math headers: skipped (VOTIONSPLAT_NO_DEV_TOOLS)"
     primary = _CUDA_ROOT / "include"
     if not primary.is_dir():
         return f"cuda math headers: missing {primary}"
@@ -132,6 +141,8 @@ def apply_venv_scripts_path() -> str:
 
 def apply_vcvars64() -> str:
     """Load MSVC env so gsplat JIT can find cl.exe. No-op if vcvars64 is missing."""
+    if dev_tools_skipped():
+        return "vcvars64: skipped (VOTIONSPLAT_NO_DEV_TOOLS)"
     if os.name != "nt":
         return "vcvars64: skip (not Windows)"
     if os.environ.get("VOTION_VCVARS") == "1":

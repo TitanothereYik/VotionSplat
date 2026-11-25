@@ -33,7 +33,7 @@ flatbuffers==25.12.19
 fonttools==4.68.0
 fsspec==2026.9.0
 ftfy==6.1.1
-fused-ssim @ file:///D:/Votion3DGS/vendor/litegs/litegs/submodules/fused_ssim
+fused-ssim @ file:///D:/Votion3DGS/vendor/fused_ssim
 grpcio==1.85.1
 gsplat @ file:///D:/Votion3DGS/.venvs/hyworld/worldgen/third_party/gsplat_maskgaussian
 h11==0.16.0
@@ -84,6 +84,8 @@ nest-asyncio==1.6.0
 networkx==3.7
 ninja==1.13.2
 numpy==1.26.4
+nvidia-cuda-nvrtc-cu12==12.9.86
+nvidia-cuda-runtime-cu12==12.9.79
 omegaconf==2.4.0
 onnx==1.23.2
 onnxruntime-gpu==1.32.0

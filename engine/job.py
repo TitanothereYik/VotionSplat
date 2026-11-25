@@ -97,16 +97,17 @@ def worker_env(cuda_index: int) -> dict[str, str]:
     env["PYTHONUNBUFFERED"] = "1"
     env["PYTHONIOENCODING"] = "utf-8"
     env["CUDA_DEVICE_INDEX"] = str(cuda_index)
-    cuda = Path(r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8")
-    if (cuda / "bin" / "nvcc.exe").is_file():
-        env["CUDA_PATH"] = str(cuda)
-        env["CUDA_HOME"] = str(cuda)
-        env["PATH"] = str(cuda / "bin") + os.pathsep + env.get("PATH", "")
     scripts = Path(sys.executable).resolve().parent
     env["PATH"] = str(scripts) + os.pathsep + env.get("PATH", "")
-    from engine.cuda_jit import msvc_cl_dir
+    if os.environ.get("VOTIONSPLAT_NO_DEV_TOOLS") != "1":
+        cuda = Path(r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8")
+        if (cuda / "bin" / "nvcc.exe").is_file():
+            env["CUDA_PATH"] = str(cuda)
+            env["CUDA_HOME"] = str(cuda)
+            env["PATH"] = str(cuda / "bin") + os.pathsep + env.get("PATH", "")
+        from engine.cuda_jit import msvc_cl_dir
 
-    cl_dir = msvc_cl_dir()
-    if cl_dir is not None:
-        env["PATH"] = str(cl_dir) + os.pathsep + env.get("PATH", "")
+        cl_dir = msvc_cl_dir()
+        if cl_dir is not None:
+            env["PATH"] = str(cl_dir) + os.pathsep + env.get("PATH", "")
     return apply_huggingface_cache_env(env)
