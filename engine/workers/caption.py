@@ -16,12 +16,11 @@ MANIFEST_PATH = REPO_ROOT / "tools" / "model_manifest.json"
 
 def _pin_florence(hub_id: str, revision: str) -> None:
     data = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
-    data["florence"] = {
-        "hub_id": hub_id,
-        "revision": revision,
-        "task": FLORENCE_TASK,
-        "note": "Pinned after first successful engine.workers.caption. Do not invent a quantized fork.",
-    }
+    for entry in data.get("models", []):
+        if entry.get("id") == "florence":
+            entry["repo"] = hub_id
+            entry["revision"] = revision
+            break
     MANIFEST_PATH.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     print(f"STATUS // florence pin written {hub_id} rev={revision}", flush=True)
 

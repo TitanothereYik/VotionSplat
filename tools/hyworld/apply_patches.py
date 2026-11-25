@@ -179,8 +179,10 @@ def patch(root: Path) -> None:
         "def save_image(splitted_image, path):\n",
         '''def _load_local_sam3(device):
     """Meta sam3.pt, not the transformers Hub build."""
-    root = os.environ.get("SAM3_ROOT", r"D:\\sam3\\sam3")
-    ckpt = os.environ.get("SAM3_CHECKPOINT", r"D:\\sam3\\checkpoints\\sam3.pt")
+    repo = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir, os.pardir, os.pardir))
+    root = os.environ.get("SAM3_ROOT", os.path.join(repo, "vendor", "sam3"))
+    ckpt = os.environ.get("SAM3_CHECKPOINT", os.path.join(repo, "models", "sam3", "sam3.pt"))
+    print(f"STATUS // SAM3 loading from {ckpt}", flush=True)
     if root not in sys.path:
         sys.path.insert(0, root)
     from sam3.model.sam3_image_processor import Sam3Processor as LocalProcessor

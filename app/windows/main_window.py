@@ -57,14 +57,12 @@ STAGES = (
     "Splat",
 )
 
-HELP_HOME = """FIELD GUIDE
-2D Images (default) or 360 / text → 8K ERP → Plan trajectories → Expand → dataset → splat.
-Ostris blocks 2D Generate until READY. h_fov 70. text keeps the trigger prefix.
-After 2D Images, prompt.txt = outpaint instruction + surroundings. Generate strips that green instruction.
-Preview the mesh flight. Four straight rails usually enough. Do not skip 8K. Extra rails do not fix glass.
-Download models: Hub cache is the install folder .hf_cache, ready files in models.
+HELP_HOME = """HOME
+Download what this machine is missing, then work left to right: Panorama, Trajectories, Expand, Dataset, Splat.
+Core is every stage. Core + optional adds Difix cleanup and Florence-2 captions.
+Weight files land in models. Hub snapshots land in .hf_cache. SAM 3 is already in the install.
 
-Votion 3DGS  2.0  Yik  MIT"""
+VotionSplat  3.0"""
 
 LOG_IDLE = """STATUS // idle
 Qt never imports torch. Dummy worker: 20 lines then exit. Stop kills the subprocess."""
@@ -98,16 +96,28 @@ def _read_manifest() -> dict:
     return json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
 
 
+def _snapshot_dir(root: Path, entry: dict) -> Path:
+    if entry.get("local_dir"):
+        return root / entry["local_dir"]
+    org, name = entry["repo"].split("/", 1)
+    folder = "models--" + org + "--" + name.replace("/", "--")
+    return root / ".hf_cache" / "hub" / folder / "snapshots" / entry["revision"]
+
+
 def _is_ready(root: Path, entry: dict) -> bool:
-    base = root if entry.get("under") == "repo" else root / "models"
-    path = base / entry["local_relative_path"]
-    if not path.is_file():
-        return False
-    size = path.stat().st_size
-    expected = entry.get("expected_bytes")
-    if expected is not None:
-        return size == int(expected)
-    return size > 0
+    kind = entry.get("kind")
+    if kind in ("file", "url", "bundled"):
+        path = root / entry["dest"]
+        if not path.is_file():
+            return False
+        expected = entry.get("expected_bytes")
+        if expected is None:
+            return path.stat().st_size > 0
+        return path.stat().st_size == int(expected)
+    if kind == "snapshot":
+        base = _snapshot_dir(root, entry)
+        return all((base / rel).is_file() for rel in entry.get("check_files", []))
+    return False
 
 
 def gpu_names() -> list[str]:
@@ -159,6 +169,7 @@ class StatCell(QFrame):
         layout.setContentsMargins(8, 6, 8, 6)
         layout.setSpacing(4)
         title = QLabel(name)
+        title.setWordWrap(True)
         title.setProperty("class", "statName")
         self.val = QLabel(value)
         self.val.setProperty("class", "statVal")
@@ -459,22 +470,20 @@ class MainWindow(QMainWindow):
         r.addWidget(self.cuda)
 
         r.addWidget(self._lab("Download set"))
-        self.radio_p1 = QRadioButton("P1 subset (default)")
-        self.radio_all = QRadioButton("All (includes WAN 14B)")
-        self.radio_p1.setChecked(True)
-        self.radio_p1.toggled.connect(self._on_download_set)
+        core_gb = sum(
+            float(entry.get("size_gb") or 0)
+            for entry in self._manifest["models"]
+            if entry.get("group") == "core"
+        )
+        self.radio_core = QRadioButton(f"Core (required, about {core_gb:.0f} GB)")
+        self.radio_all = QRadioButton("Core + optional (Difix, captions)")
+        self.radio_core.setChecked(True)
+        self.radio_core.toggled.connect(self._on_download_set)
         radios = QVBoxLayout()
         radios.setSpacing(4)
-        radios.addWidget(self.radio_p1)
+        radios.addWidget(self.radio_core)
         radios.addWidget(self.radio_all)
         r.addLayout(radios)
-
-        hint = QLabel(
-            "Florence-2 only if captioning is enabled. MoGe is a P2 subset — not this default."
-        )
-        hint.setWordWrap(True)
-        hint.setProperty("class", "fHint")
-        r.addWidget(hint)
 
         btns = QHBoxLayout()
         self.btn_dl = QPushButton("Download models")
@@ -500,7 +509,7 @@ class MainWindow(QMainWindow):
         self.stat_grid.setContentsMargins(0, 4, 0, 0)
         self.stat_grid.setSpacing(6)
         v.addWidget(self.stat_host)
-        note = QLabel("Status machine: MISSING_* | READY. Subset READY is OK in P0.")
+        note = QLabel("Green is ready. A missing core model blocks that stage.")
         note.setWordWrap(True)
         note.setProperty("class", "fHint")
         v.addWidget(note)
@@ -639,47 +648,16 @@ class MainWindow(QMainWindow):
         self.log.ensureCursorVisible()
 
     def _download_set(self) -> str:
-        return "p1" if self.radio_p1.isChecked() else "all"
+        return "core" if self.radio_core.isChecked() else "all"
 
-    def _status_rows(self) -> list[tuple[str, str, str, str]]:
-        download_set = self._download_set()
-        wanted = "p1" if download_set == "p1" else "all"
-        rows: list[tuple[str, str, str, str]] = []
-        shown = {e["id"]: e for e in self._manifest["files"] if wanted in e.get("sets", [])}
-        order = [
-            "krea",
-            "clip",
-            "vae",
-            "lora",
-            "lora_outpaint",
-            "realesrgan",
-            "umt5",
-            "clip_vision",
-            "ultrasharp",
-            "worldstereo_fp8",
-            "worldstereo_config",
-            "dinov2",
-            "wan480_config",
-        ]
-        for key in order:
-            entry = shown.get(key)
-            if entry is None:
-                continue
-            if _is_ready(REPO_ROOT, entry):
-                rows.append((entry["id"], entry["label"], "READY", "READY"))
-            else:
-                rows.append(
-                    (entry["id"], entry["label"], f"MISSING_{entry['id']}", "MISSING")
-                )
-        if download_set == "p1":
-            moge = next(e for e in self._manifest["files"] if e["id"] == "moge")
-            if _is_ready(REPO_ROOT, moge):
-                rows.append((moge["id"], moge["label"], "READY", "READY"))
-            else:
-                rows.append((moge["id"], moge["label"], "P2 subset", "NOTE"))
-        for info in self._manifest.get("info_rows", []):
-            rows.append((info["id"], info["label"], info["note"], "NOTE"))
-        return rows
+    def _visible_models(self) -> list[dict]:
+        models = self._manifest["models"]
+        if self._download_set() == "core":
+            return [entry for entry in models if entry.get("group") == "core"]
+        return list(models)
+
+    def _card_name(self, entry: dict) -> str:
+        return f"{entry['label']}\n{entry['stage']} · {float(entry.get('size_gb') or 0):.2f} GB"
 
     def _refresh_status(self) -> None:
         while self.stat_grid.count():
@@ -688,21 +666,35 @@ class MainWindow(QMainWindow):
             if w is not None:
                 w.deleteLater()
         self._stat_cells = {}
-        for i, (entry_id, name, value, state) in enumerate(self._status_rows()):
-            cell = StatCell(entry_id, name, value, state)
-            self._stat_cells[entry_id] = cell
-            self.stat_grid.addWidget(cell, i // 2, i % 2)
+        grid_row = 0
+        col = 0
+        group = ""
+        for entry in self._visible_models():
+            if entry.get("group") != group:
+                group = entry.get("group") or ""
+                title = QLabel("Core" if group == "core" else "Optional")
+                title.setProperty("class", "viewLbl")
+                self.stat_grid.addWidget(title, grid_row, 0, 1, 2)
+                grid_row += 1
+                col = 0
+            ready = _is_ready(REPO_ROOT, entry)
+            value = "READY" if ready else f"MISSING_{entry['id']}"
+            state = "READY" if ready else "MISSING"
+            cell = StatCell(entry["id"], self._card_name(entry), value, state)
+            self._stat_cells[entry["id"]] = cell
+            self.stat_grid.addWidget(cell, grid_row, col)
+            col += 1
+            if col == 2:
+                col = 0
+                grid_row += 1
 
     def _set_download_controls(self, enabled: bool) -> None:
-        self.radio_p1.setEnabled(enabled)
+        self.radio_core.setEnabled(enabled)
         self.radio_all.setEnabled(enabled)
         self.btn_dl.setEnabled(enabled)
 
     def _arm_download_bars(self) -> None:
-        wanted = "p1" if self._download_set() == "p1" else "all"
-        for entry in self._manifest["files"]:
-            if wanted not in entry.get("sets", []):
-                continue
+        for entry in self._visible_models():
             cell = self._stat_cells.get(entry["id"])
             if cell is None:
                 continue
@@ -824,12 +816,13 @@ class MainWindow(QMainWindow):
             return
         try:
             data = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
-            data["florence"] = {
-                "hub_id": hub,
-                "revision": (self._florence_rev or "").strip(),
-                "task": "<CAPTION>",
-                "note": "Pinned after first successful engine.workers.caption. Do not invent a quantized fork.",
-            }
+            revision = (self._florence_rev or "").strip()
+            for entry in data.get("models", []):
+                if entry.get("id") == "florence":
+                    entry["repo"] = hub
+                    if revision:
+                        entry["revision"] = revision
+                    break
             MANIFEST_PATH.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
             self._append_log(f"STATUS // florence pin written {hub} rev={self._florence_rev}")
         except Exception as exc:

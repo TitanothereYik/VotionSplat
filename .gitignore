@@ -37,6 +37,8 @@ vendor/seedvr2/**
 !vendor/seedvr2/.gitkeep
 vendor/difix3d/**
 !vendor/difix3d/.gitkeep
+vendor/sam3/**
+!vendor/sam3/.gitkeep
 
 # Downloaded vendor archives. The extracted source is under vendor/.
 _hy_fetch/

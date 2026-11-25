@@ -1,14 +1,7 @@
-"""Download missing models from Hugging Face, else MISSING_<id> + Index URL.
+"""Download the models in tools/model_manifest.json.
 
-Lookup order per docs/Votion_3DGS_2.0_Phase0.md. No invented file sizes.
-Free-space check for WAN 14B uses Hugging Face metadata (measured), not a guessed GB.
-
-Progress lines (stdout, for the Home status bars):
-
-    PROGRESS\\t<id>\\tstart\\t<total_bytes>   total 0 if Hub did not report a size
-    PROGRESS\\t<id>\\t<bytes>\\t<total>\\t<pct>  pct is -1 when total is unknown
-    PROGRESS\\t<id>\\tdone
-    PROGRESS\\t<id>\\tfail
+Kinds: file (Hugging Face file, then a hardlink into dest), snapshot (a pinned
+Hub revision), url (a direct download), bundled (already in the install).
 """
 
 from __future__ import annotations
@@ -19,12 +12,11 @@ import os
 import shutil
 import sys
 import time
-import warnings
+import urllib.request
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MANIFEST = Path(__file__).resolve().parent / "model_manifest.json"
-LEGACY_HF_HUB = Path.home() / ".cache" / "huggingface" / "hub"
 
 
 def hf_cache_root(root: Path) -> Path:
@@ -32,12 +24,7 @@ def hf_cache_root(root: Path) -> Path:
 
 
 def apply_hf_cache_env(root: Path) -> Path:
-    """Pin Hub + Xet cache to the repo drive before huggingface_hub is imported.
-
-    Default Hub cache is C:\\Users\\<user>\\.cache\\huggingface — a different
-    volume from D:\\Votion3DGS\\models. Hugging Face then warns (or fills C:)
-    even when D: has hundreds of GB free.
-    """
+    """Pin Hub + Xet cache to the chosen install before huggingface_hub is imported."""
     cache = hf_cache_root(root)
     (cache / "hub").mkdir(parents=True, exist_ok=True)
     (cache / "xet").mkdir(parents=True, exist_ok=True)
@@ -46,10 +33,10 @@ def apply_hf_cache_env(root: Path) -> Path:
     os.environ["HF_XET_CACHE"] = str(cache / "xet")
     os.environ["HF_HUB_DISABLE_SYMLINKS"] = "1"
     os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
+    mirror = os.environ.get("VOTIONSPLAT_HF_ENDPOINT", "").strip()
+    if mirror:
+        os.environ["HF_ENDPOINT"] = mirror
     return cache
-
-
-apply_hf_cache_env(REPO_ROOT)
 
 
 def log(msg: str) -> None:
@@ -157,12 +144,35 @@ def load_manifest(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def dest_path(root: Path, entry: dict) -> Path:
-    return root / "models" / entry["local_relative_path"]
+def select_entries(manifest: dict, download_set: str) -> list[dict]:
+    models = manifest["models"]
+    if download_set == "core":
+        return [entry for entry in models if entry.get("group") == "core"]
+    return list(models)
 
 
-def is_ready(path: Path) -> bool:
-    return path.is_file() and path.stat().st_size > 0
+def snapshot_dir(root: Path, entry: dict) -> Path:
+    if entry.get("local_dir"):
+        return root / entry["local_dir"]
+    org, name = entry["repo"].split("/", 1)
+    folder = "models--" + org + "--" + name.replace("/", "--")
+    return root / ".hf_cache" / "hub" / folder / "snapshots" / entry["revision"]
+
+
+def is_ready(root: Path, entry: dict) -> bool:
+    kind = entry.get("kind")
+    if kind in ("file", "url", "bundled"):
+        path = root / entry["dest"]
+        if not path.is_file():
+            return False
+        expected = entry.get("expected_bytes")
+        if expected is None:
+            return path.stat().st_size > 0
+        return path.stat().st_size == int(expected)
+    if kind == "snapshot":
+        base = snapshot_dir(root, entry)
+        return all((base / rel).is_file() for rel in entry.get("check_files", []))
+    return False
 
 
 def copy_or_hardlink(src: Path, dest: Path) -> str:
@@ -179,215 +189,160 @@ def copy_or_hardlink(src: Path, dest: Path) -> str:
     return "copy"
 
 
-def select_entries(manifest: dict, download_set: str) -> list[dict]:
-    if download_set == "p1":
-        wanted = "p1"
-    elif download_set == "p2":
-        wanted = "p2"
-    else:
-        wanted = "all"
-    return [e for e in manifest["files"] if wanted in e.get("sets", [])]
+def _hf_token() -> str | None:
+    token = os.environ.get("HF_TOKEN", "").strip() or os.environ.get("HUGGING_FACE_HUB_TOKEN", "").strip()
+    return token or None
 
 
-def status_token(entry: dict, root: Path) -> str:
-    if is_ready(dest_path(root, entry)):
-        return "READY"
+def _mark_ready(entry: dict, note: str) -> str:
+    size = int(entry.get("expected_bytes") or 0)
+    progress(entry["id"], "start", size)
+    progress(entry["id"], size, size, 100)
+    progress(entry["id"], "done")
+    log(f"{entry['id']}: {note}")
+    return "READY"
+
+
+def fetch_file(entry: dict, root: Path, cache: Path) -> str:
+    dest = root / entry["dest"]
+    if is_ready(root, entry):
+        return _mark_ready(entry, f"already READY {dest}")
+    from huggingface_hub import hf_hub_download
+
+    known = int(entry.get("expected_bytes") or 0)
+    progress(entry["id"], "start", known)
+    log(f"{entry['id']}: Hugging Face {entry['repo']} {entry['filename']}")
+    cached = hf_hub_download(
+        repo_id=entry["repo"],
+        filename=entry["filename"],
+        cache_dir=str(cache / "hub"),
+        token=_hf_token(),
+        tqdm_class=_tqdm_for(entry["id"]),
+    )
+    kind = copy_or_hardlink(Path(cached), dest)
+    if not is_ready(root, entry):
+        progress(entry["id"], "fail")
+        log(f"MISSING_{entry['id']} {dest}")
+        return f"MISSING_{entry['id']}"
+    progress(entry["id"], "done")
+    log(f"{entry['id']}: {kind} -> {dest}")
+    return "READY"
+
+
+def fetch_snapshot(entry: dict, root: Path, cache: Path) -> str:
+    if is_ready(root, entry):
+        return _mark_ready(entry, f"already READY {entry['repo']}@{entry['revision'][:12]}")
+    from huggingface_hub import snapshot_download
+
+    known = int(round(float(entry.get("size_gb") or 0) * 1_000_000_000))
+    progress(entry["id"], "start", known)
+    kwargs = {
+        "repo_id": entry["repo"],
+        "revision": entry["revision"],
+        "cache_dir": str(cache / "hub"),
+        "token": _hf_token(),
+        "tqdm_class": _tqdm_for(entry["id"]),
+    }
+    patterns = entry.get("allow_patterns") or None
+    if patterns:
+        kwargs["allow_patterns"] = patterns
+    local_dir = entry.get("local_dir")
+    if local_dir:
+        kwargs["local_dir"] = str(root / local_dir)
+    log(f"{entry['id']}: snapshot {entry['repo']}@{entry['revision'][:12]}")
+    snapshot_download(**kwargs)
+    if not is_ready(root, entry):
+        progress(entry["id"], "fail")
+        log(f"MISSING_{entry['id']} {entry['repo']}")
+        return f"MISSING_{entry['id']}"
+    progress(entry["id"], known, known, 100)
+    progress(entry["id"], "done")
+    return "READY"
+
+
+def fetch_url(entry: dict, root: Path) -> str:
+    dest = root / entry["dest"]
+    if is_ready(root, entry):
+        return _mark_ready(entry, f"already READY {dest}")
+    part = dest.parent / (dest.name + ".part")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    log(f"{entry['id']}: {entry['url']}")
+    request = urllib.request.Request(entry["url"])
+    with urllib.request.urlopen(request) as response:
+        total = int(response.headers.get("Content-Length") or entry.get("expected_bytes") or 0)
+        progress(entry["id"], "start", total)
+        done = 0
+        with part.open("wb") as handle:
+            while True:
+                chunk = response.read(1024 * 1024)
+                if not chunk:
+                    break
+                handle.write(chunk)
+                done += len(chunk)
+                pct = int(100 * done / total) if total else -1
+                progress(entry["id"], done, total, pct)
+    os.replace(part, dest)
+    if not is_ready(root, entry):
+        progress(entry["id"], "fail")
+        log(f"MISSING_{entry['id']} {entry['url']}")
+        return f"MISSING_{entry['id']}"
+    progress(entry["id"], "done")
+    return "READY"
+
+
+def fetch_bundled(entry: dict, root: Path) -> str:
+    dest = root / entry["dest"]
+    if is_ready(root, entry):
+        return _mark_ready(entry, f"bundled READY {dest}")
+    progress(entry["id"], "fail")
+    log(f"MISSING {entry['id']} (reinstall VotionSplat)")
     return f"MISSING_{entry['id']}"
 
 
-def hf_size_bytes(entry: dict) -> int | None:
-    """Measured size from Hub metadata. Returns None if Hub does not report it."""
+def fetch_one(entry: dict, root: Path, cache: Path) -> str:
+    kind = entry.get("kind")
     try:
-        from huggingface_hub import get_hf_file_metadata, hf_hub_url
-
-        url = hf_hub_url(
-            repo_id=entry["repo"],
-            filename=entry["hf_filename"],
-            revision="main",
-        )
-        meta = get_hf_file_metadata(url)
-        size = getattr(meta, "size", None)
-        if size is None:
-            return None
-        return int(size)
+        if kind == "file":
+            return fetch_file(entry, root, cache)
+        if kind == "snapshot":
+            return fetch_snapshot(entry, root, cache)
+        if kind == "url":
+            return fetch_url(entry, root)
+        if kind == "bundled":
+            return fetch_bundled(entry, root)
     except Exception as exc:
-        log(f"size lookup failed for {entry['id']}: {type(exc).__name__}: {exc}")
-        return None
-
-
-def volume_free_bytes(path: Path) -> int:
-    """Free bytes on the volume that `path` lives on (or will live on)."""
-    probe = path if path.exists() else Path(path.anchor) if path.anchor else path.parent
-    return shutil.disk_usage(probe).free
+        progress(entry["id"], "fail")
+        log(f"MISSING_{entry['id']} ({type(exc).__name__}: {exc})")
+        return f"MISSING_{entry['id']}"
+    progress(entry["id"], "fail")
+    log(f"MISSING_{entry['id']} unknown kind {kind}")
+    return f"MISSING_{entry['id']}"
 
 
 def gb(n: int) -> str:
     return f"{n / (1024 ** 3):.2f} GB"
 
 
-def log_disk_map(root: Path, cache: Path) -> None:
-    dest = root / "models"
-    dest_free = volume_free_bytes(dest)
-    cache_free = volume_free_bytes(cache)
-    c_free = volume_free_bytes(Path("C:/"))
-    log(f"HF cache={cache} ({gb(cache_free)} free on that volume)")
-    log(f"models dest={dest} ({gb(dest_free)} free on that volume)")
-    log(
-        f"C: {gb(c_free)} free - Hub is not writing to "
-        f"{Path.home() / '.cache' / 'huggingface'}"
-    )
-
-
-def ensure_free_space(dest: Path, cache: Path, needed: int, entry_id: str) -> None:
-    dest_free = volume_free_bytes(dest)
-    cache_free = volume_free_bytes(cache)
-    log(
-        f"disk dest={gb(dest_free)} cache={gb(cache_free)}; "
-        f"Hub size for {entry_id}={needed} bytes ({gb(needed)})"
-    )
-    if dest_free < needed:
-        raise RuntimeError(
-            f"not enough free space on the models drive for {entry_id}: "
-            f"need {gb(needed)}, have {gb(dest_free)} ({dest})"
-        )
-    if cache_free < needed:
-        raise RuntimeError(
-            f"not enough free space on the Hugging Face cache drive for {entry_id}: "
-            f"need {gb(needed)}, have {gb(cache_free)} ({cache})"
-        )
-
-
-_orig_showwarning = warnings.showwarning
-
-
-def _hf_disk_warning(message, category, filename, lineno, file=None, line=None):
-    text = str(message)
-    if "Not enough free disk space" in text:
+def warn_disk(root: Path, entries: list[dict]) -> None:
+    needed_gb = sum(float(entry.get("size_gb") or 0) for entry in entries) + 20
+    free = shutil.disk_usage(root if root.exists() else Path(root.anchor or root)).free
+    log(f"dest={root} ({gb(free)} free on that volume)")
+    if free < needed_gb * 1_000_000_000:
         log(
-            "Hugging Face cache warning (check the path in this message — "
-            f"it is not the D: models folder): {text}"
+            f"WARNING // {gb(free)} free, this set is about "
+            f"{needed_gb - 20:.1f} GB plus 20 GB of working space"
         )
-        return
-    _orig_showwarning(message, category, filename, lineno, file=file, line=line)
-
-
-def lookup_cached_hf(entry: dict, cache_dirs: list[Path]) -> Path | None:
-    """Reuse a blob already on disk (legacy C: cache or this repo's cache)."""
-    try:
-        from huggingface_hub import _CACHED_NO_EXIST, try_to_load_from_cache
-    except Exception:
-        return None
-    for cache_dir in cache_dirs:
-        if not cache_dir.is_dir():
-            continue
-        try:
-            hit = try_to_load_from_cache(
-                repo_id=entry["repo"],
-                filename=entry["hf_filename"],
-                cache_dir=str(cache_dir),
-                revision="main",
-            )
-        except Exception:
-            continue
-        if hit is None or hit is _CACHED_NO_EXIST:
-            continue
-        path = Path(str(hit))
-        if is_ready(path):
-            return path
-    return None
-
-
-def download_hf(entry: dict, dest: Path, cache: Path) -> None:
-    from huggingface_hub import hf_hub_download
-
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    hub_dir = cache / "hub"
-    previous = warnings.showwarning
-    warnings.showwarning = _hf_disk_warning
-    try:
-        cached = hf_hub_download(
-            repo_id=entry["repo"],
-            filename=entry["hf_filename"],
-            revision="main",
-            cache_dir=str(hub_dir),
-            tqdm_class=_tqdm_for(entry["id"]),
-        )
-    finally:
-        warnings.showwarning = previous
-    kind = copy_or_hardlink(Path(cached), dest)
-    log(f"{entry['id']}: HF {kind} -> {dest}")
-
-
-def fetch_one(entry: dict, root: Path, cache: Path) -> str:
-    dest = dest_path(root, entry)
-
-    if is_ready(dest):
-        size = dest.stat().st_size
-        progress(entry["id"], "start", size)
-        progress(entry["id"], size, size, 100)
-        progress(entry["id"], "done")
-        log(f"{entry['id']}: already READY {dest}")
-        return "READY"
-
-    reuse = lookup_cached_hf(entry, [cache / "hub", LEGACY_HF_HUB])
-    if reuse is not None:
-        size = reuse.stat().st_size
-        progress(entry["id"], "start", size)
-        kind = copy_or_hardlink(reuse, dest)
-        progress(entry["id"], size, size, 100)
-        progress(entry["id"], "done")
-        log(f"{entry['id']}: cache {kind} {reuse} -> {dest}")
-        return "READY"
-
-    known = hf_size_bytes(entry)
-    total = int(known) if known else 0
-    progress(entry["id"], "start", total)
-    log(f"{entry['id']}: not cached; Hugging Face {entry['url']}")
-    if entry.get("check_free_space"):
-        if known is None:
-            progress(entry["id"], "fail")
-            raise RuntimeError(
-                f"WAN 14B size unknown from Hub; aborting {entry['id']} "
-                f"(Index URL {entry['url']})"
-            )
-        ensure_free_space(dest, cache, known, entry["id"])
-
-    try:
-        download_hf(entry, dest, cache)
-    except Exception as exc:
-        progress(entry["id"], "fail")
-        log(
-            f"MISSING_{entry['id']} {entry['url']} "
-            f"({type(exc).__name__}: {exc})"
-        )
-        return f"MISSING_{entry['id']}"
-
-    if is_ready(dest):
-        size = dest.stat().st_size
-        progress(entry["id"], size, total or size, 100)
-        progress(entry["id"], "done")
-        return "READY"
-    progress(entry["id"], "fail")
-    log(f"MISSING_{entry['id']} {entry['url']}")
-    return f"MISSING_{entry['id']}"
 
 
 def print_status(manifest: dict, root: Path, download_set: str) -> None:
     for entry in select_entries(manifest, download_set):
-        log(f"{entry['label']}\t{status_token(entry, root)}")
-    if download_set == "p1":
-        moge = next(e for e in manifest["files"] if e["id"] == "moge")
-        if is_ready(dest_path(root, moge)):
-            log(f"{moge['label']}\tREADY")
-        else:
-            log(f"{moge['label']}\tP2 subset")
-    for row in manifest.get("info_rows", []):
-        log(f"{row['label']}\t{row['note']}")
+        token = "READY" if is_ready(root, entry) else f"MISSING_{entry['id']}"
+        log(f"{entry['label']}\t{token}")
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Votion 3DGS model downloader")
-    parser.add_argument("--set", choices=("p1", "p2", "all"), default="p1")
+    parser = argparse.ArgumentParser(description="VotionSplat model downloader")
+    parser.add_argument("--set", choices=("core", "all"), default="core")
     parser.add_argument("--root", type=Path, default=REPO_ROOT)
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
     parser.add_argument("--status-only", action="store_true")
@@ -396,22 +351,19 @@ def main(argv: list[str] | None = None) -> int:
     root = args.root.resolve()
     cache = apply_hf_cache_env(root)
     manifest = load_manifest(args.manifest)
-
     if args.status_only:
         print_status(manifest, root, args.set)
         return 0
 
+    entries = select_entries(manifest, args.set)
     log(f"STATUS // download set={args.set}")
-    log(f"dest={root / 'models'}")
-    log_disk_map(root, cache)
-
+    warn_disk(root, entries)
     worst = 0
-    for entry in select_entries(manifest, args.set):
+    for entry in entries:
         token = fetch_one(entry, root, cache)
         log(f"{entry['label']}\t{token}")
-        if token.startswith("MISSING_"):
+        if token.startswith("MISSING"):
             worst = 1
-
     log("STATUS // download finished")
     return worst
 

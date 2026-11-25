@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-SAM3_ROOT = Path(r"D:\sam3\sam3")
-SAM3_CHECKPOINT = Path(r"D:\sam3\checkpoints\sam3.pt")
+from engine.job import REPO_ROOT
+
+SAM3_ROOT = REPO_ROOT / "vendor" / "sam3"
+SAM3_CHECKPOINT = REPO_ROOT / "models" / "sam3" / "sam3.pt"
 PIN = "df9988efb87bfc0f4947eb3889411cf957478b06"
 
 HELP_TRAJECTORIES = """TRAJECTORIES

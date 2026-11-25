@@ -1,208 +1,412 @@
 {
-  "source": "docs/Votion_3DGS_2.0_Index.md \u2014 Model filenames (from the two ComfyUI graphs). No invented sizes. Optional nvfp4 and GGUF Q4 omitted (not 3090 Quality default). SphereSfM binary waits until Reconstruct. Florence Hub is in the florence object, not this files list.",
-  "dest_root": "models",
-  "files": [
+  "version": 2,
+  "models": [
     {
       "id": "krea",
-      "label": "Krea 2 fp8",
+      "label": "Krea 2",
+      "group": "core",
+      "stage": "Panorama",
+      "kind": "file",
+      "size_gb": 13.14,
       "repo": "Comfy-Org/Krea-2",
-      "hf_filename": "diffusion_models/krea2_turbo_fp8_scaled.safetensors",
-      "filename": "krea2_turbo_fp8_scaled.safetensors",
-      "local_relative_path": "diffusion_models/krea2_turbo_fp8_scaled.safetensors",
-      "url": "https://huggingface.co/Comfy-Org/Krea-2/resolve/main/diffusion_models/krea2_turbo_fp8_scaled.safetensors",
-      "public": true,
-      "sets": [
-        "p1",
-        "all"
-      ]
-    },
-    {
-      "id": "lora",
-      "label": "360 T2I LoRA",
-      "repo": "mickmumpitz/Krea2-360-ERP-LoRAs",
-      "hf_filename": "krea2_t2i_360_erp_lora_v1.safetensors",
-      "filename": "krea2_t2i_360_erp_lora_v1.safetensors",
-      "local_relative_path": "loras/krea2_t2i_360_erp_lora_v1.safetensors",
-      "url": "https://huggingface.co/mickmumpitz/Krea2-360-ERP-LoRAs/resolve/main/krea2_t2i_360_erp_lora_v1.safetensors",
-      "public": true,
-      "sets": [
-        "p1",
-        "all"
-      ]
-    },
-    {
-      "id": "lora_outpaint",
-      "label": "360 outpaint LoRA",
-      "repo": "mickmumpitz/Krea2-360-ERP-LoRAs",
-      "hf_filename": "krea2_oedit_360_erp_outpaint_lora_v1.safetensors",
-      "filename": "krea2_oedit_360_erp_outpaint_lora_v1.safetensors",
-      "local_relative_path": "loras/krea2_oedit_360_erp_outpaint_lora_v1.safetensors",
-      "url": "https://huggingface.co/mickmumpitz/Krea2-360-ERP-LoRAs/resolve/main/krea2_oedit_360_erp_outpaint_lora_v1.safetensors",
-      "public": true,
-      "sets": [
-        "p1",
-        "all"
-      ]
+      "filename": "diffusion_models/krea2_turbo_fp8_scaled.safetensors",
+      "dest": "models/diffusion_models/krea2_turbo_fp8_scaled.safetensors",
+      "expected_bytes": 13141730784
     },
     {
       "id": "clip",
-      "label": "CLIP qwen3vl",
+      "label": "Krea 2 text encoder",
+      "group": "core",
+      "stage": "Panorama",
+      "kind": "file",
+      "size_gb": 5.24,
       "repo": "Comfy-Org/Krea-2",
-      "hf_filename": "text_encoders/qwen3vl_4b_fp8_scaled.safetensors",
-      "filename": "qwen3vl_4b_fp8_scaled.safetensors",
-      "local_relative_path": "text_encoders/qwen3vl_4b_fp8_scaled.safetensors",
-      "url": "https://huggingface.co/Comfy-Org/Krea-2/resolve/main/text_encoders/qwen3vl_4b_fp8_scaled.safetensors",
-      "public": true,
-      "sets": [
-        "p1",
-        "all"
-      ]
+      "filename": "text_encoders/qwen3vl_4b_fp8_scaled.safetensors",
+      "dest": "models/text_encoders/qwen3vl_4b_fp8_scaled.safetensors",
+      "expected_bytes": 5242467968
     },
     {
       "id": "vae",
-      "label": "wan_2.1_vae",
+      "label": "Wan VAE",
+      "group": "core",
+      "stage": "Panorama",
+      "kind": "file",
+      "size_gb": 0.25,
       "repo": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-      "hf_filename": "split_files/vae/wan_2.1_vae.safetensors",
-      "filename": "wan_2.1_vae.safetensors",
-      "local_relative_path": "vae/wan_2.1_vae.safetensors",
-      "url": "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/vae/wan_2.1_vae.safetensors",
-      "public": true,
-      "sets": [
-        "p1",
-        "all"
-      ]
+      "filename": "split_files/vae/wan_2.1_vae.safetensors",
+      "dest": "models/vae/wan_2.1_vae.safetensors",
+      "expected_bytes": 253815318
+    },
+    {
+      "id": "lora",
+      "label": "Krea 2 360 ERP LoRA",
+      "group": "core",
+      "stage": "Panorama",
+      "kind": "file",
+      "size_gb": 0.23,
+      "repo": "mickmumpitz/Krea2-360-ERP-LoRAs",
+      "filename": "krea2_t2i_360_erp_lora_v1.safetensors",
+      "dest": "models/loras/krea2_t2i_360_erp_lora_v1.safetensors",
+      "expected_bytes": 228587744
+    },
+    {
+      "id": "lora_outpaint",
+      "label": "Krea 2 360 outpaint LoRA",
+      "group": "core",
+      "stage": "Panorama",
+      "kind": "file",
+      "size_gb": 0.23,
+      "repo": "mickmumpitz/Krea2-360-ERP-LoRAs",
+      "filename": "krea2_oedit_360_erp_outpaint_lora_v1.safetensors",
+      "dest": "models/loras/krea2_oedit_360_erp_outpaint_lora_v1.safetensors",
+      "expected_bytes": 228587600
     },
     {
       "id": "realesrgan",
       "label": "RealESRGAN x2",
+      "group": "core",
+      "stage": "Panorama",
+      "kind": "file",
+      "size_gb": 0.07,
       "repo": "ai-forever/Real-ESRGAN",
-      "hf_filename": "RealESRGAN_x2.pth",
       "filename": "RealESRGAN_x2.pth",
-      "local_relative_path": "upscale_models/RealESRGAN_x2.pth",
-      "url": "https://huggingface.co/ai-forever/Real-ESRGAN/resolve/main/RealESRGAN_x2.pth",
-      "public": true,
-      "sets": [
-        "p1",
-        "all"
+      "dest": "models/upscale_models/RealESRGAN_x2.pth",
+      "expected_bytes": 67061725
+    },
+    {
+      "id": "moge",
+      "label": "MoGe",
+      "group": "core",
+      "stage": "Panorama",
+      "kind": "file",
+      "size_gb": 1.26,
+      "repo": "Ruicheng/moge-vitl",
+      "filename": "model.pt",
+      "dest": "models/MoGe/model.pt",
+      "expected_bytes": 1256823446
+    },
+    {
+      "id": "qwen3vl_8b",
+      "label": "Qwen3-VL 8B",
+      "group": "core",
+      "stage": "Trajectories",
+      "kind": "snapshot",
+      "size_gb": 17.55,
+      "repo": "Qwen/Qwen3-VL-8B-Instruct",
+      "revision": "0c351dd01ed87e9c1b53cbc748cba10e6187ff3b",
+      "allow_patterns": [
+        ".gitattributes",
+        "chat_template.json",
+        "config.json",
+        "generation_config.json",
+        "merges.txt",
+        "model-00001-of-00004.safetensors",
+        "model-00002-of-00004.safetensors",
+        "model-00003-of-00004.safetensors",
+        "model-00004-of-00004.safetensors",
+        "model.safetensors.index.json",
+        "preprocessor_config.json",
+        "README.md",
+        "tokenizer.json",
+        "tokenizer_config.json",
+        "video_preprocessor_config.json",
+        "vocab.json"
+      ],
+      "check_files": [
+        ".gitattributes",
+        "chat_template.json",
+        "config.json",
+        "generation_config.json",
+        "merges.txt",
+        "model-00001-of-00004.safetensors",
+        "model-00002-of-00004.safetensors",
+        "model-00003-of-00004.safetensors",
+        "model-00004-of-00004.safetensors",
+        "model.safetensors.index.json",
+        "preprocessor_config.json",
+        "README.md",
+        "tokenizer.json",
+        "tokenizer_config.json",
+        "video_preprocessor_config.json",
+        "vocab.json"
       ]
     },
     {
-      "id": "umt5",
-      "label": "UMT5 xxL fp8",
-      "repo": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-      "hf_filename": "split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
-      "filename": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
-      "local_relative_path": "text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
-      "url": "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/blob/main/split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
-      "public": true,
-      "sets": [
-        "all"
+      "id": "zim",
+      "label": "ZIM",
+      "group": "core",
+      "stage": "Trajectories",
+      "kind": "snapshot",
+      "size_gb": 1.26,
+      "repo": "naver-iv/zim-anything-vitl",
+      "revision": "667e2d7c233f6f1cacd12ccc64bdf6cc7b5aa16d",
+      "allow_patterns": ["zim_vit_l_2092/*"],
+      "check_files": ["zim_vit_l_2092/decoder.onnx", "zim_vit_l_2092/encoder.onnx"]
+    },
+    {
+      "id": "grounding_dino",
+      "label": "Grounding DINO",
+      "group": "core",
+      "stage": "Trajectories",
+      "kind": "snapshot",
+      "size_gb": 0.69,
+      "repo": "IDEA-Research/grounding-dino-tiny",
+      "revision": "a2bb814dd30d776dcf7e30523b00659f4f141c71",
+      "allow_patterns": ["*.json", "*.txt", "model.safetensors"],
+      "check_files": [
+        "added_tokens.json",
+        "config.json",
+        "model.safetensors",
+        "preprocessor_config.json",
+        "special_tokens_map.json",
+        "tokenizer.json",
+        "tokenizer_config.json",
+        "vocab.txt"
       ]
     },
     {
-      "id": "clip_vision",
-      "label": "CLIP vision H",
-      "repo": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-      "hf_filename": "split_files/clip_vision/clip_vision_h.safetensors",
-      "filename": "clip_vision_h.safetensors",
-      "local_relative_path": "clip_vision/clip_vision_h.safetensors",
-      "url": "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/blob/main/split_files/clip_vision/clip_vision_h.safetensors",
-      "public": true,
-      "sets": [
-        "all"
-      ]
+      "id": "moge2",
+      "label": "MoGe 2",
+      "group": "core",
+      "stage": "Trajectories",
+      "kind": "snapshot",
+      "size_gb": 1.32,
+      "repo": "Ruicheng/moge-2-vitl-normal",
+      "revision": "cb0e8bbd6b1e243589717c78e750b1ba4c093acf",
+      "allow_patterns": [".gitattributes", "model.pt", "README.md"],
+      "check_files": [".gitattributes", "model.pt", "README.md"]
     },
     {
-      "id": "ultrasharp",
-      "label": "4x-UltraSharp",
-      "repo": "Kim2091/UltraSharp",
-      "hf_filename": "4x-UltraSharp.pth",
-      "filename": "4x-UltraSharp.pth",
-      "local_relative_path": "upscale_models/4x-UltraSharp.pth",
-      "url": "https://huggingface.co/Kim2091/UltraSharp/blob/main/4x-UltraSharp.pth",
-      "public": true,
-      "sets": [
-        "all"
-      ]
+      "id": "sam3",
+      "label": "SAM 3",
+      "group": "core",
+      "stage": "Trajectories",
+      "kind": "bundled",
+      "size_gb": 3.45,
+      "dest": "models/sam3/sam3.pt",
+      "expected_bytes": 3450062241
     },
     {
       "id": "worldstereo_fp8",
-      "label": "WorldStereo FP8",
+      "label": "WorldStereo",
+      "group": "core",
+      "stage": "Expand",
+      "kind": "file",
+      "size_gb": 20.36,
       "repo": "apozz/WorldStereo-fp8",
-      "hf_filename": "WorldStereo-memory-dmd-fp8_e4m3fn_scaled.safetensors",
       "filename": "WorldStereo-memory-dmd-fp8_e4m3fn_scaled.safetensors",
-      "local_relative_path": "diffusion_models/WorldStereo-memory-dmd-fp8_e4m3fn_scaled.safetensors",
-      "url": "https://huggingface.co/apozz/WorldStereo-fp8/resolve/main/WorldStereo-memory-dmd-fp8_e4m3fn_scaled.safetensors",
-      "public": true,
-      "expected_bytes": 20356086900,
-      "sets": [
-        "all"
-      ]
-    },
-    {
-      "id": "dinov2",
-      "label": "DINOv2 base",
-      "repo": "facebook/dinov2-base",
-      "hf_filename": "model.safetensors",
-      "filename": "model.safetensors",
-      "local_relative_path": "dinov2-base/model.safetensors",
-      "url": "https://huggingface.co/facebook/dinov2-base/resolve/main/model.safetensors",
-      "public": true,
-      "expected_bytes": 346345912,
-      "sets": [
-        "all"
-      ]
+      "dest": "models/diffusion_models/WorldStereo-memory-dmd-fp8_e4m3fn_scaled.safetensors",
+      "expected_bytes": 20356086900
     },
     {
       "id": "worldstereo_config",
       "label": "WorldStereo config",
+      "group": "core",
+      "stage": "Expand",
+      "kind": "snapshot",
+      "size_gb": 0.0,
       "repo": "hanshanxue/WorldStereo",
-      "hf_filename": "worldstereo-memory-dmd/config.json",
-      "filename": "config.json",
-      "under": "repo",
-      "local_relative_path": ".hf_cache/hub/models--hanshanxue--WorldStereo/snapshots/ac2ad97ecb043fe80c2f19cd1898006becb9d66e/worldstereo-memory-dmd/config.json",
-      "url": "https://huggingface.co/hanshanxue/WorldStereo/resolve/main/worldstereo-memory-dmd/config.json",
-      "public": true,
-      "expected_bytes": 3452,
-      "sets": [
-        "all"
-      ]
+      "revision": "ac2ad97ecb043fe80c2f19cd1898006becb9d66e",
+      "allow_patterns": ["worldstereo-memory-dmd/config.json"],
+      "check_files": ["worldstereo-memory-dmd/config.json"]
     },
     {
       "id": "wan480_config",
-      "label": "WAN 480P config",
+      "label": "Wan 480P config",
+      "group": "core",
+      "stage": "Expand",
+      "kind": "snapshot",
+      "size_gb": 0.0,
       "repo": "Wan-AI/Wan2.1-I2V-14B-480P-Diffusers",
-      "hf_filename": "transformer/config.json",
-      "filename": "config.json",
-      "under": "repo",
-      "local_relative_path": ".hf_cache/hub/models--Wan-AI--Wan2.1-I2V-14B-480P-Diffusers/snapshots/b184e23a8a16b20f108f727c902e769e873ffc73/transformer/config.json",
-      "url": "https://huggingface.co/Wan-AI/Wan2.1-I2V-14B-480P-Diffusers/resolve/main/transformer/config.json",
-      "public": true,
-      "expected_bytes": 466,
-      "sets": [
-        "all"
+      "revision": "b184e23a8a16b20f108f727c902e769e873ffc73",
+      "allow_patterns": ["transformer/config.json"],
+      "check_files": ["transformer/config.json"]
+    },
+    {
+      "id": "wan720_configs",
+      "label": "Wan 720P configs",
+      "group": "core",
+      "stage": "Expand",
+      "kind": "snapshot",
+      "size_gb": 0.02,
+      "repo": "Wan-AI/Wan2.1-I2V-14B-720P-Diffusers",
+      "revision": "eb849f76dfa246545b65774a9e25943ee69b3fa3",
+      "allow_patterns": [
+        "image_encoder/config.json",
+        "image_processor/preprocessor_config.json",
+        "model_index.json",
+        "scheduler/scheduler_config.json",
+        "text_encoder/config.json",
+        "tokenizer/special_tokens_map.json",
+        "tokenizer/spiece.model",
+        "tokenizer/tokenizer.json",
+        "tokenizer/tokenizer_config.json"
+      ],
+      "check_files": [
+        "image_encoder/config.json",
+        "image_processor/preprocessor_config.json",
+        "model_index.json",
+        "scheduler/scheduler_config.json",
+        "text_encoder/config.json",
+        "tokenizer/special_tokens_map.json",
+        "tokenizer/spiece.model",
+        "tokenizer/tokenizer.json",
+        "tokenizer/tokenizer_config.json"
       ]
     },
     {
-      "id": "moge",
-      "label": "MoGe vitl",
-      "repo": "Ruicheng/moge-vitl",
-      "hf_filename": "model.pt",
-      "filename": "model.pt",
-      "local_relative_path": "MoGe/model.pt",
-      "url": "https://huggingface.co/Ruicheng/moge-vitl/resolve/main/model.pt",
-      "public": true,
-      "sets": [
-        "p2",
-        "all"
+      "id": "umt5",
+      "label": "UMT5",
+      "group": "core",
+      "stage": "Expand",
+      "kind": "file",
+      "size_gb": 6.74,
+      "repo": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+      "filename": "split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+      "dest": "models/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+      "expected_bytes": 6735906897
+    },
+    {
+      "id": "clip_vision",
+      "label": "CLIP vision",
+      "group": "core",
+      "stage": "Expand",
+      "kind": "file",
+      "size_gb": 1.26,
+      "repo": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+      "filename": "split_files/clip_vision/clip_vision_h.safetensors",
+      "dest": "models/clip_vision/clip_vision_h.safetensors",
+      "expected_bytes": 1264219396
+    },
+    {
+      "id": "dinov2",
+      "label": "DINOv2",
+      "group": "core",
+      "stage": "Expand",
+      "kind": "snapshot",
+      "size_gb": 0.35,
+      "repo": "facebook/dinov2-base",
+      "revision": "f9e44c814b77203eaa57a6bdbbd535f21ede1415",
+      "local_dir": "models/dinov2-base",
+      "allow_patterns": ["config.json", "preprocessor_config.json", "model.safetensors"],
+      "check_files": ["config.json", "preprocessor_config.json", "model.safetensors"]
+    },
+    {
+      "id": "seedvr2_3b",
+      "label": "SeedVR2 3B",
+      "group": "core",
+      "stage": "HiRes",
+      "kind": "file",
+      "size_gb": 3.39,
+      "repo": "numz/SeedVR2_comfyUI",
+      "filename": "seedvr2_ema_3b_fp8_e4m3fn.safetensors",
+      "dest": "models/SEEDVR2/seedvr2_ema_3b_fp8_e4m3fn.safetensors",
+      "expected_bytes": 3391544696
+    },
+    {
+      "id": "seedvr2_vae",
+      "label": "SeedVR2 VAE",
+      "group": "core",
+      "stage": "HiRes",
+      "kind": "file",
+      "size_gb": 0.5,
+      "repo": "numz/SeedVR2_comfyUI",
+      "filename": "ema_vae_fp16.safetensors",
+      "dest": "models/SEEDVR2/ema_vae_fp16.safetensors",
+      "expected_bytes": 501324814
+    },
+    {
+      "id": "lpips_vgg16",
+      "label": "LPIPS VGG16",
+      "group": "core",
+      "stage": "Splat",
+      "kind": "url",
+      "size_gb": 0.55,
+      "url": "https://download.pytorch.org/models/vgg16-397923af.pth",
+      "dest": ".hf_cache/torch/hub/checkpoints/vgg16-397923af.pth",
+      "expected_bytes": 553433881
+    },
+    {
+      "id": "difix",
+      "label": "Difix",
+      "group": "optional",
+      "stage": "Splat",
+      "kind": "snapshot",
+      "size_gb": 5.17,
+      "repo": "nvidia/difix_ref",
+      "revision": "d4830559772a5795c9d136302c5b197d6418d3fb",
+      "allow_patterns": [
+        "model_index.json",
+        "scheduler/scheduler_config.json",
+        "text_encoder/config.json",
+        "text_encoder/model.safetensors",
+        "tokenizer/merges.txt",
+        "tokenizer/special_tokens_map.json",
+        "tokenizer/tokenizer_config.json",
+        "tokenizer/vocab.json",
+        "unet/config.json",
+        "unet/diffusion_pytorch_model.safetensors",
+        "unet/unet_2d_condition.py",
+        "vae/autoencoder_kl.py",
+        "vae/config.json",
+        "vae/diffusion_pytorch_model.safetensors"
+      ],
+      "check_files": [
+        "model_index.json",
+        "scheduler/scheduler_config.json",
+        "text_encoder/config.json",
+        "text_encoder/model.safetensors",
+        "tokenizer/merges.txt",
+        "tokenizer/special_tokens_map.json",
+        "tokenizer/tokenizer_config.json",
+        "tokenizer/vocab.json",
+        "unet/config.json",
+        "unet/diffusion_pytorch_model.safetensors",
+        "unet/unet_2d_condition.py",
+        "vae/autoencoder_kl.py",
+        "vae/config.json",
+        "vae/diffusion_pytorch_model.safetensors"
+      ]
+    },
+    {
+      "id": "florence",
+      "label": "Florence-2",
+      "group": "optional",
+      "stage": "Panorama",
+      "kind": "snapshot",
+      "size_gb": 1.56,
+      "repo": "florence-community/Florence-2-large",
+      "revision": "4271c66b88cdbc05735372ec13b2360108de5317",
+      "allow_patterns": [
+        ".gitattributes",
+        "added_tokens.json",
+        "config.json",
+        "generation_config.json",
+        "merges.txt",
+        "model.safetensors",
+        "preprocessor_config.json",
+        "processor_config.json",
+        "README.md",
+        "special_tokens_map.json",
+        "tokenizer.json",
+        "tokenizer_config.json",
+        "vocab.json"
+      ],
+      "check_files": [
+        ".gitattributes",
+        "added_tokens.json",
+        "config.json",
+        "generation_config.json",
+        "merges.txt",
+        "model.safetensors",
+        "preprocessor_config.json",
+        "processor_config.json",
+        "README.md",
+        "special_tokens_map.json",
+        "tokenizer.json",
+        "tokenizer_config.json",
+        "vocab.json"
       ]
     }
-  ],
-  "info_rows": [],
-  "florence": {
-    "hub_id": "florence-community/Florence-2-large",
-    "revision": "4271c66b88cdbc05735372ec13b2360108de5317",
-    "task": "<CAPTION>",
-    "note": "Pinned after first successful engine.workers.caption. Do not invent a quantized fork."
-  }
+  ]
 }

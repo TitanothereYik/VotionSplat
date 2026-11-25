@@ -146,8 +146,9 @@ def _prepare_env(stage: str) -> None:
     os.environ["LOCAL_RANK"] = "0"
     os.environ["MASTER_ADDR"] = "127.0.0.1"
     os.environ["MASTER_PORT"] = _free_port()
-    os.environ.setdefault("SAM3_ROOT", r"D:\sam3\sam3")
-    os.environ.setdefault("SAM3_CHECKPOINT", r"D:\sam3\checkpoints\sam3.pt")
+    os.environ.setdefault("SAM3_ROOT", str(REPO / "vendor" / "sam3"))
+    os.environ.setdefault("SAM3_CHECKPOINT", str(REPO / "models" / "sam3" / "sam3.pt"))
+    print(f"STATUS // SAM3 loading from {os.environ['SAM3_CHECKPOINT']}", flush=True)
     os.environ["HY_VLM_KEEP"] = "0" if stage == "traj_generate" else "1"
     cache = REPO / ".hf_cache"
     os.environ["HF_HOME"] = str(cache)
