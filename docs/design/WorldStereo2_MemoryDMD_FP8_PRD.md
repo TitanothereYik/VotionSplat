@@ -1,8 +1,8 @@
 # PRD — WorldStereo 2.0 (memory DMD, FP8) as an experimental Quality generator
 
-**Product:** Votion 3DGS 2.0  
+**Product:** VotionSplat  
 **Track:** experimental generator, gated. Not a numbered phase.  
-**Depends on:** Phase 3 working end to end on `alpine_02` (four WAN rails, HiRes, SphereSfM, LiteGS splat), because that is the baseline it must beat.  
+**Depends on:** Phase 3 working end to end on `alpine_02` (four WAN rails, HiRes, SphereSfM, the previous trainer splat), because that is the baseline it must beat.  
 **Unlocks:** nothing by itself. If it wins the bake-off, a follow-up PRD decides whether it becomes the Quality default.  
 **Out of scope:** replacing WAN, changing Fast / Scout, HY-Pano, WorldNav, WorldMirror, HY-World’s 3DGS trainer, any change to Phases 0–2.
 
@@ -12,10 +12,9 @@
 - Official weights: [hanshanxue/WorldStereo](https://huggingface.co/hanshanxue/WorldStereo), subfolder `worldstereo-memory-dmd` (commit `2adb716` is the FP8 source)
 - FP8 build: [apozz/WorldStereo-fp8](https://huggingface.co/apozz/WorldStereo-fp8), file `WorldStereo-memory-dmd-fp8_e4m3fn_scaled.safetensors`
 - Papers: WorldStereo [arXiv:2603.02049](https://arxiv.org/abs/2603.02049) (CVPR 2026); HY-World 2.0 [arXiv:2604.14268](https://arxiv.org/abs/2604.14268) §5 (WorldStereo 2.0), §7 (composition)
-- Votion background: [docs/WAN_Replacement_Review_and_Alternatives.md](../docs/WAN_Replacement_Review_and_Alternatives.md) §4.2 and §6, [docs/WorldMirror2_Report.md](../docs/WorldMirror2_Report.md)
-- Certainty log: [docs/Votion_3DGS_2.0_Index.md](../docs/Votion_3DGS_2.0_Index.md)
-- Phase 3 baseline: [Phase3_Dataset_PRD.md](Phase3_Dataset_PRD.md)
-- Set index: [README.md](README.md)
+- Companion note: [WorldMirror2_Report.md](WorldMirror2_Report.md)
+- Design notes live in this folder. The 2.0 index was removed in 3.0.
+- The 2.0 phase notes were removed in 3.0. This file is the remaining WorldStereo design note.
 
 If this PRD and the certainty log disagree, the certainty log wins. **This PRD does not reopen anything by being written.** Section 0 lists what the owner has to sign first.
 
@@ -39,7 +38,7 @@ If this PRD and the certainty log disagree, the certainty log wins. **This PRD d
 
 | Field | Value | Status |
 |-------|--------|--------|
-| Name | Votion 3DGS | Locked |
+| Name | VotionSplat | Locked |
 | Owner | **Yik**. MIT product. Small private team. | Locked |
 | Version | **2.0** only | Locked |
 | Feature | **WorldStereo 2.0 generator**: per-rail perspective keyframes generated from a point-cloud render, occlusion mask, and camera, with a **memory bank shared across rails** | Proposed |
@@ -51,7 +50,7 @@ If this PRD and the certainty log disagree, the certainty log wins. **This PRD d
 
 ## 2. Problem & objectives
 
-**Problem.** WAN fills each rail independently. Two rails that look at the same hole invent two different things. SphereSfM and LiteGS then fit a scene that disagrees with itself. The single-view overfit proves the raster and optimizer are fine; the multi-view loss is the data.
+**Problem.** WAN fills each rail independently. Two rails that look at the same hole invent two different things. SphereSfM and the previous trainer then fit a scene that disagrees with itself. The single-view overfit proves the raster and optimizer are fine; the multi-view loss is the data.
 
 WorldStereo 2.0 is built for that failure:
 
@@ -63,10 +62,10 @@ WorldStereo 2.0 is built for that failure:
 
 1. Generate all rails of one scene through WorldStereo `memory-dmd` on one RTX 3090, sequentially, with the memory bank carried across rails.
 2. Keep Votion’s inputs: Krea 8K ERP, MoGe at `moge_level` 9, Plot Camera rails starting at the star. No HY-Pano, no WorldNav, no VLM.
-3. Produce a COLMAP dataset with **known poses** from the generated keyframes plus gnomonic faces of the 8K pano, and train it with the existing LiteGS backend.
+3. Produce a COLMAP dataset with **known poses** from the generated keyframes plus gnomonic faces of the 8K pano, and train it with the existing the previous trainer backend.
 4. Restore 8K detail where the pano can answer, by a pinhole version of HiRes.
 5. Measure, on `alpine_02`, against the Phase 3 WAN baseline: joint fit of overlapping frames from different rails, hold-out PSNR, peak VRAM, wall time.
-6. Native Python only. No ComfyUI process, no WSL, no `torchrun`, no NCCL.
+6. Native Python only. No extra process, no WSL, no `torchrun`, no NCCL.
 
 **Not an objective:** beating WAN per clip. WorldStereo outputs ~480p perspective frames; WAN outputs 1440×720 ERP. The win condition is consistency (§8).
 
@@ -105,7 +104,7 @@ Scratch folder, Votion venv (Python 3.12, cu128). WorldStereo’s README targets
 1. Vendor `FuchengSu/WorldStereo` at a pinned SHA under `vendor/worldstereo/` with its `LICENSE.md` and a NOTICE. Do **not** vendor `Tencent-Hunyuan/HY-World-2.0` (different licence, and only needed for WorldMirror post-processing, which this PRD skips).
 2. Dependencies to prove on Windows, in this order, each written to `docs/env_report.txt`:
    - `diffusers` with `WanTransformer3DModel` (already used by `engine/video/wan_runtime.py`)
-   - **PyTorch3D** (README step 3; used for point-cloud rendering). No official Windows wheel for 3.12 + cu128 is known; try a local build with the same toolchain `engine/cuda_jit.py` uses for LiteGS. If it fails, see §4.4 fallback.
+   - **PyTorch3D** (README step 3; used for point-cloud rendering). No official Windows wheel for 3.12 + cu128 is known; try a local build with the same toolchain `engine/cuda_jit.py` uses for the previous trainer. If it fails, see §4.4 fallback.
    - MoGe: WorldStereo pins MoGe commit `0286b495…`. Votion vendors MoGe already. Record whether the vendored copy satisfies its imports.
    - DINOv2 (memory retrieval scoring). Exact checkpoint: read from the WorldStereo config at pin. Must load from `<install_root>\models`, never `torch.hub` over the network.
 3. Load path: Python API `WorldStereo.from_pretrained(..., subfolder="worldstereo-memory-dmd", sp_world_size=1, fsdp=False, device=cuda:0)`, with the DiT weights swapped for the FP8 file (§4.3). No `torch.distributed` init. If the code path insists on a process group, patch it to a no-op single rank and record the patch.
@@ -161,7 +160,7 @@ The FP8 file is Kijai-style **scaled** FP8 with diffusers key names (`blocks.0.a
 | Marker | A `scaled_fp8` tensor is present; the loader checks it and refuses a file without it |
 | Ampere path | Replace each FP8 `nn.Linear` with a module that keeps the weight in `float8_e4m3fn` and computes `F.linear(x, w.to(x.dtype) * scale, bias)` per call. **No speed-up on the 3090** (no FP8 matmul); the gain is memory only |
 | Do not | Dequantize the whole DiT to BF16 at load (`engine/worldstereo/encoders.py` does that only for umT5). That is ~35 GB for the DiT and defeats the point |
-| Code | `engine/worldstereo/fp8.py`. Own implementation from the recipe on the model card; do not copy ComfyUI-WanVideoWrapper code |
+| Code | `engine/worldstereo/fp8.py`. Own implementation from the recipe on the model card. |
 | Text encoder, CLIP-Vision, VAE | Wan 2.1 I2V 480P and 720P share umT5-XXL, CLIP-Vision H and the Wan 2.1 VAE. Loaders live in `engine/worldstereo/encoders.py`. |
 | Keyframe-VAE | WorldStereo encodes each keyframe independently (spatial-only compression). It reuses the Wan VAE weights; confirm at pin |
 | Order on GPU | Encode text and CLIP first, move them off GPU, then load the FP8 DiT. Text encoder never resident with the DiT |
@@ -249,7 +248,7 @@ Kept / Ditched rails follow the Reconstruct page. Ditched rails are excluded. Ne
 
 ### 4.8 Splat
 
-Unchanged. LiteGS backend, LiteGS or MCMC Compact controller, full-SH `splat.ply`, hold-out PSNR. HY-World trains RGB-only Gaussians; Votion keeps SH (Index lock on reflections).
+Unchanged at the time of this note: full-SH `splat.ply` and a hold-out PSNR check. HY-World trains RGB-only Gaussians.
 
 ### 4.9 UI (Generate and Reconstruct only)
 
@@ -307,11 +306,11 @@ tools\model_manifest.json           new entries, exact filenames, no invented si
 - [x] Four rails of `alpine_02`, one view each, generated in one worker run with memory carried across rails. That run used the old one-view folder layout.
 - [ ] Re-gen restores the previous rail's snapshot in the user order and marks later rails stale. The old index bug is fixed in code; it has not been run on the GPU.
 - [ ] Pinhole HiRes writes 960×1664 frames and `gate_masks`; mean coverage logged, not 0.0.
-- [ ] Known-pose COLMAP for the six-view layout. The old one-view `alpine_02` dataset did train in LiteGS (hold-out about 28.5 dB). Brush was not checked. The new per-view names are not yet built.
-- [x] LiteGS trained the old one-view known-pose set on the 3090 without OOM after the generator had exited.
+- [ ] Known-pose COLMAP for the six-view layout. The old one-view `alpine_02` dataset did train in the previous trainer (hold-out about 28.5 dB). Brush was not checked. The new per-view names are not yet built.
+- [x] the previous trainer trained the old one-view known-pose set on the 3090 without OOM after the generator had exited.
 - [ ] The bake-off numbers in §8. Not run. #61 is an owner decision, not that bake-off.
 - [x] WAN generator code is removed. Leftover WAN files on disk are not deleted by the app.
-- [ ] No ComfyUI, no WSL, no `torchrun`, no network call at run time (DINOv2, MoGe, weights all local).
+- [ ] No extra process, no WSL, no `torchrun`, no network call at run time (DINOv2, MoGe, weights all local).
 
 ### 4.12 Do not
 
@@ -343,9 +342,9 @@ tools\model_manifest.json           new entries, exact filenames, no invented si
 
 | Artifact | Use |
 |----------|-----|
-| [Phase3.html #gen-ui](../docs/Votion_3DGS_2.0_Phase3.html#gen-ui) | Generate chrome; add the Generator selector and three-up split |
-| [Phase3.html #recon-ui](../docs/Votion_3DGS_2.0_Phase3.html#recon-ui) | Keep / Ditch / Re-gen; add dependency warning and dataset source switch |
-| [votion-plan.css](../docs/votion-plan.css) | Colours, type, drawers |
+| Generate page | Add the generator selector and the three-up split. |
+| Reconstruct page | Keep, ditch, and re-gen, plus the dataset source switch. |
+| App theme | Colours and type live in `app/theme.qss`. |
 
 No HTML dummy exists for this track. Do not edit the Phase 3 dummy for it. If the toggle graduates, a dummy is made first.
 
@@ -403,7 +402,7 @@ No calendar dates. Order:
 | WS-0 | Gates G1–G3 | Certainty log entries |
 | WS-1 | Environment spike (§4.1, §4.3) | One trajectory, VRAM and time in `env_report.txt` |
 | WS-2 | Adapter + worker on `alpine_02`, four rails, memory across rails (§4.2, §4.5) | `retrieved.json` shows cross-rail retrieval |
-| WS-3 | Known-pose dataset + LiteGS train with 480p keyframes only (§4.7, §4.8) | First joint-fit and hold-out numbers |
+| WS-3 | Known-pose dataset + the previous trainer train with 480p keyframes only (§4.7, §4.8) | First joint-fit and hold-out numbers |
 | WS-4 | Pinhole HiRes (§4.6), retrain | Numbers with 8K detail |
 | WS-5 | UI (§4.9), manifest, Help drawer text | §4.11 all ticked |
 | WS-6 | Owner decision, not the §8 bake-off | Closed 2026-10-30 (Index #61): WorldStereo is the Quality route. WAN code removed. |
@@ -416,7 +415,7 @@ WS-3 before WS-4 on purpose: if consistency does not improve at 480p, pinhole Hi
 
 1. ~~Weights licence for `hanshanxue/WorldStereo` (G2).~~ **Accepted as UNKNOWN, 2026-10-29 (Index #59).** Not resolved to MIT or to the Tencent community licence.
 2. Mask polarity and default FoV in `camera.json`: read at pin.
-3. Does WorldStereo’s pipeline accept Votion’s Comfy-format umT5 / CLIP-Vision / VAE, or does it need the 480P-Diffusers subfolders?
+3. Does the pipeline accept the umT5, CLIP-Vision and VAE files under `models/`, or does it need the 480P-Diffusers subfolders?
 4. Exact DINOv2 checkpoint the retrieval code loads.
 5. Views per rail: is one forward view enough for coverage, or does each rail need 3–4 yaw directions? Measure coverage at WS-3.
-6. Does pinhole HiRes at 2× keyframe size give LiteGS enough detail, or does it need 4× (1920×3328)?
+6. Does pinhole HiRes at 2× keyframe size give the previous trainer enough detail, or does it need 4× (1920×3328)?

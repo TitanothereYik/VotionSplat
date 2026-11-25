@@ -3,7 +3,7 @@
 **Status:** report only. No project file is changed.  
 **Date:** 2026-10-26.  
 **Machine this is judged against:** RTX 3090 24 GB, the locked Quality GPU.  
-**Question:** does WorldMirror-2 replace WAN, MoGe, SphereSfM, or the LiteGS trainer in Votion?
+**Question:** does WorldMirror-2 replace the video model, MoGe, SphereSfM, or the splat trainer?
 
 Short answer: it replaces none of them. It is the feed-forward reconstruction model inside Tencent HY-World 2.0. In that system it runs **after** the video model, on ordinary perspective frames, and its own authors say it is not built for panoramas. The index already archives the parent system.
 
@@ -131,10 +131,10 @@ High resolution (756×1036) is about four times the pixels of 518×378. The pape
 | Krea 8K ERP | Untouched. HY-Pano 2.0 is the panorama model in this family, and it emits ~2K, not 8K. |
 | MoGe mesh | Still required in Tencent’s pipeline. WorldMirror depth is scale-free until it is aligned to the MoGe cloud. MoGe2 also supplies the normals used on every training frame. |
 | Plot Camera + validity mask | Untouched. WorldMirror does not inpaint holes and does not take a mask video. |
-| WAN + pano LoRA | Untouched. WorldMirror consumes frames. It does not generate them. See [WAN_Replacement_Review_and_Alternatives.md](WAN_Replacement_Review_and_Alternatives.md) for the models that actually compete with WAN. WorldStereo 2.0 is the sibling that does. |
+| Video model | Untouched. WorldMirror consumes frames. It does not generate them. WorldStereo is the sibling that does. |
 | HiRes 8K composite | Untouched. Inference tops out near 1 MP per view, center-cropped. |
 | SphereSfM | The only stage it overlaps. SphereSfM matches the **equirect** frames as spherical cameras, then Votion rewrites cube faces as true gnomonic pinholes (index item 57). WorldMirror wants perspective images and center-crops. Feeding it the raw ERP is the failure mode item 57 already forbids for ordinary COLMAP. |
-| LiteGS / MCMC Compact | Still required if the goal is the trained splat. Tencent trains a second 3DGS on top of WorldMirror. Their feed-forward Gaussians are degree-0 colour, capped at 5M, and are not the shipped world. |
+| Splat trainer | Still required if the goal is the trained splat. Tencent trains a second 3DGS on top of WorldMirror. Their feed-forward Gaussians are degree-0 colour, capped at 5M, and are not the shipped world. |
 | Reflections | Lost if the degree-0 head or Tencent’s view-independent trainer is used as the final colour. |
 
 SplatKit already offered a WorldMirror dataset path beside VGGT, and the SphereSfM node was written as the alternative: classical matches and a spherical bundle adjustment, because a feed-forward network is a learned guess and a static pan will not triangulate. WorldMirror-2 is a stronger version of that learned guess on perspective benchmarks. It does not add a spherical camera.
@@ -178,6 +178,6 @@ A win would mean a faster geometric prior for a later trainer. It would not reti
 | Paper, “not tailored for panoramic reconstruction”, tables 11–14, composition stage | [arXiv:2604.14268](https://arxiv.org/abs/2604.14268) |
 | WorldMirror 1.0 memory table (H20, 518×378) | [arXiv:2510.10726](https://arxiv.org/abs/2510.10726), appendix F |
 | Weights | [tencent/HY-World-2.0](https://huggingface.co/tencent/HY-World-2.0), subfolder `HY-WorldMirror-2.0` |
-| Votion rejection and the reflection lock | [Votion_3DGS_2.0_Index.md](Votion_3DGS_2.0_Index.md) |
+| Reflection lock | The shipped splat keeps view-dependent colour. A degree-0 head does not. |
 | Why SphereSfM exists next to WorldMirror | `vendor/splatkit/nodes/spheresfm.py` |
-| The video model in the same family | [WAN_Replacement_Review_and_Alternatives.md](WAN_Replacement_Review_and_Alternatives.md), WorldStereo row |
+| The video model in the same family | WorldStereo, documented in `docs/design/WorldStereo2_MemoryDMD_FP8_PRD.md`. |

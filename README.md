@@ -1,50 +1,45 @@
-# Votion 3DGS
+<p align="center"><img src="app/assets/banner.png" alt="VotionSplat" width="100%"></p>
 
-Native Windows app that turns a picture, a 360 image, or a text prompt into a 3D Gaussian splat. Version **2.0**. It is a desktop program (PySide6), not a browser UI and not a ComfyUI graph.
+# VotionSplat 3.0
 
-Owner: Yik. License: [MIT](LICENSE). No telemetry. The first audience is a small private team.
+Windows app that turns a photo, a 360 panorama, or a sentence into a Gaussian splat for Unreal.
 
 ## Pipeline
 
+1. **Home** downloads the models.
+2. **Panorama** builds an 8K equirectangular image.
+3. **Trajectories** plans walks and paints guides.
+4. **Expand** fills the guides and can upscale them.
+5. **Dataset** writes the training images, depth, and normals.
+6. **Splat** trains the splat, optionally refines it, and exports `splat.ply`.
+
+![VotionSplat](docs/media/screenshots/app-01.png)
+
+## Install (company machines)
+
+See [docs/INSTALL.md](docs/INSTALL.md). The installer is on the company share, not in this repository.
+
+## Developer setup
+
+Python 3.12. The UI environment is `.venv`. Trajectories, Dataset, and Splat use `.venvs\hyworld`, built with `tools\hyworld\install.ps1`. HiRes uses `.venvs\seedvr2`. Difix uses `.venvs\difix`.
+
 ```
-2D image (default), 360 image, or text
-  → 8K equirectangular panorama
-  → MoGe geometry and Plot Camera rails
-  → WAN 2.1 hole-fill (720p) on those rails
-  → 8K HiRes composite (WAN only in the holes)
-  → SphereSfM, then gnomonic cube faces
-  → train the splat
-  → splat.ply (full spherical harmonics)
-```
-
-Quality profile targets an RTX 3090 (24 GB). Fast and Scout ship as profiles. The window has six stages: Home, Panorama, Geometry, Generate, Reconstruct, Splat.
-
-The UI dummy is at [titanothereyik.github.io/votion-3dgs-2-html](https://titanothereyik.github.io/votion-3dgs-2-html/). Product rules live in [docs/Votion_3DGS_2.0_Index.md](docs/Votion_3DGS_2.0_Index.md) and [PRD/README.md](PRD/README.md).
-
-## Run
-
-Windows, Python **3.12**, CUDA **12.8**. Do not point this app at another project's embedded Python.
-
-```bat
-py -3.12 -m venv .venv
-.venv\Scripts\python.exe -m pip install --upgrade pip
-.venv\Scripts\python.exe -m pip install -r requirements.lock --extra-index-url https://download.pytorch.org/whl/cu128
-```
-
-`requirements.lock` records the stack that ran on the dev machine, including `torch==2.11.0+cu128` and `PySide6==6.11.2`. The `+cu128` wheels come from the PyTorch index above.
-
-The HY-World train environment is `.venvs\hyworld`, built with `tools\hyworld\install.ps1`.
-
-Start the window:
-
-```bat
 tools\launch.bat
 ```
 
-That sets the Hugging Face cache to `.hf_cache` in this folder (not the user profile cache) and launches `python -m app.main`. On Home, **Download models** fills `models\` from `tools/model_manifest.json`. The Quality pack is on the order of 45–60 GB.
+## Unreal
 
-## What is not in git
+[docs/UNREAL_EXPORT.md](docs/UNREAL_EXPORT.md)
 
-Weights (`models\`), scene outputs (`outputs\`), the hub cache (`.hf_cache\`), and the virtualenv (`.venv\`) stay on disk. Vendored libraries are pinned in [tools/vendor_pins.json](tools/vendor_pins.json) and checked out under `vendor\` on the machine that builds them.
+## Build the installer
 
-The rollback tag for this snapshot is `snapshot/pre-worldstereo`.
+[docs/BUILD_INSTALLER.md](docs/BUILD_INSTALLER.md)
+
+## More
+
+- [User guide](docs/USER_GUIDE.md)
+- [Models](docs/MODELS.md)
+- [Changelog](docs/CHANGELOG.md)
+- [Clickable mockup](https://titanothereyik.github.io/VotionSplat-mockup/)
+- [Third-party notices](THIRD_PARTY_NOTICES.md)
+- [License](LICENSE)
