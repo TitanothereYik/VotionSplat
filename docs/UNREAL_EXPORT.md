@@ -8,7 +8,7 @@ The file is `outputs\<scene>\hyworld\splat.ply`.
 
 ## Install the plugin
 
-1. Copy `{app}\unreal_plugin\VotionSplat` into `<UEProject>\Plugins\`.
+1. Copy `{app}\unreal_plugin\VotionSplat-UnrealPlugin` into `<UEProject>\Plugins\`.
 2. The plugin is for Unreal Engine 5.5.
 3. Enable it, then drag `splat.ply` into the Content Browser.
 

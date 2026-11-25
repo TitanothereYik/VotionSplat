@@ -16,6 +16,7 @@ $excludeDirs = @(
     "$Root\.pycache_tmp",
     "$Root\docs",
     "$Root\models",
+    "$Root\Logo_and_Banners",
     "$Root\site_mockup",
     "$Root\unreal",
     "$Root\.venvs\wheels",
@@ -31,6 +32,7 @@ $excludeDirs = @(
 if ($LASTEXITCODE -ge 8) {
     throw "robocopy failed with exit $LASTEXITCODE"
 }
+Get-ChildItem -LiteralPath $Stage -File -Filter *.png | Remove-Item -Force
 
 $dirs = @(
     "outputs",
@@ -53,7 +55,7 @@ foreach ($rel in $dirs) {
 }
 
 Copy-Item -LiteralPath "$Root\models\sam3\sam3.pt" -Destination "$Stage\models\sam3\sam3.pt" -Force
-Copy-Item -LiteralPath "$Root\unreal\dist\VotionSplat" -Destination "$Stage\unreal_plugin\VotionSplat" -Recurse -Force
+Copy-Item -LiteralPath "$Root\unreal\dist\VotionSplat-UnrealPlugin" -Destination "$Stage\unreal_plugin\VotionSplat-UnrealPlugin" -Recurse -Force
 Copy-Item -LiteralPath "$Root\docs\INSTALL.md" -Destination "$Stage\docs\INSTALL.md" -Force
 Copy-Item -LiteralPath "$Root\docs\UNREAL_EXPORT.md" -Destination "$Stage\docs\UNREAL_EXPORT.md" -Force
 Copy-Item -LiteralPath "$Root\THIRD_PARTY_NOTICES.md" -Destination "$Stage\docs\THIRD_PARTY_NOTICES.md" -Force
