@@ -1,5 +1,7 @@
 # Unreal export
 
+For the best result in Unreal, use **[VotionSplat-UnrealPlugin](https://github.com/TitanothereYik/VotionSplat-UnrealPlugin)**. It renders the splats with the same rasterizer rule, near plane, and spherical-harmonic degree they were trained with, which the export writes into the PLY header. A generic 3DGS plugin will load the file but will not match the app viewport.
+
 On the Splat page, **Export splat.ply** defaults to **Unreal / VotionSplat Export**:
 
 > Unreal / VotionSplat Export: drag splat.ply into the Content Browser with VotionSplat-UnrealPlugin. No settings. The file keeps the trained splats, and the plugin draws them with the same rule as this viewport.
@@ -8,7 +10,7 @@ The file is `outputs\<scene>\hyworld\splat.ply`.
 
 ## Install the plugin
 
-1. Copy `{app}\unreal_plugin\VotionSplat-UnrealPlugin` into `<UEProject>\Plugins\`.
+1. Copy `{app}\unreal_plugin\VotionSplat-UnrealPlugin` into `<UEProject>\Plugins\`, or clone [the plugin repository](https://github.com/TitanothereYik/VotionSplat-UnrealPlugin) there and let the editor compile it.
 2. The plugin is for Unreal Engine 5.5.
 3. Enable it, then drag `splat.ply` into the Content Browser.
 

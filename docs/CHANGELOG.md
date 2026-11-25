@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Home's model cards keep their full height and scroll on short windows.
+- README shows all six pages at the same size and links VotionSplat-UnrealPlugin as the way to get the best result in Unreal.
+- HY-World 2.0 carries its required NOTICE, and THIRD_PARTY_NOTICES names its license.
+
 ## 3.0.1
 
 - Align and Expand stay offline: DINOv2 loads from `models/dinov2-base`, and the Wan VAE config is a core Home download.

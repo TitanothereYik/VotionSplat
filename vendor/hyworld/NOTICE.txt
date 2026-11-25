@@ -1,0 +1,5 @@
+Tencent HY-WORLD 2.0 is licensed under the Tencent HY-WORLD 2.0 Community License Agreement, Copyright © 2026 Tencent. All Rights Reserved. The trademark rights of “Tencent HY” are owned by Tencent or its affiliate.
+
+The files in this folder are an unmodified copy of hyworld2/worldgen from https://github.com/Tencent-Hunyuan/HY-World-2.0 at commit df9988efb87bfc0f4947eb3889411cf957478b06. The full agreement is HY-World-License.txt in this folder.
+
+The Tencent HY-WORLD 2.0 Works are subject to the use restrictions in Sections 5(a) and 5(b) of that agreement, including the Acceptable Use Policy in its Exhibit A. The agreement does not apply in the European Union, the United Kingdom, or South Korea.

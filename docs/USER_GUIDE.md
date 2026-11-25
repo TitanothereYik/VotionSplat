@@ -48,7 +48,7 @@ Trains the Gaussian splat from that dataset.
 
 - **Train**, **Continue training**, **Pause**, **Stop**.
 - **Difix3D+ refine** is optional and uses the Difix model.
-- **Export splat.ply** writes `outputs\<scene>\hyworld\splat.ply`. The default color space is **Unreal / VotionSplat Export**. The other choices are **3DGS / sRGB** and **Linear Rec.709**.
+- **Export splat.ply** writes `outputs\<scene>\hyworld\splat.ply`. The default color space is **Unreal / VotionSplat Export**. The other choices are **3DGS / sRGB** and **Linear Rec.709**. For the best result in Unreal, open the file with [VotionSplat-UnrealPlugin](https://github.com/TitanothereYik/VotionSplat-UnrealPlugin); see [UNREAL_EXPORT.md](UNREAL_EXPORT.md).
 - **Open result folder** opens `outputs\<scene>\hyworld\gs_result`.
 
-Screenshots: [Home](media/screenshots/app-home.png), [Panorama](media/screenshots/app-panorama.png), [Expand](media/screenshots/app-expand.png), [Splat](media/screenshots/app-splat.png).
+Screenshots: [Home](media/screenshots/app-home.png), [Panorama](media/screenshots/app-panorama.png), [Trajectories](media/screenshots/app-trajectories.png), [Expand](media/screenshots/app-expand.png), [Dataset](media/screenshots/app-dataset.png), [Splat](media/screenshots/app-splat.png).

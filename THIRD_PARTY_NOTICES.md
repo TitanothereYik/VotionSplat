@@ -12,7 +12,7 @@ VotionSplat includes or was built from the following works. Each pin is the comm
 - ComfyUI-SeedVR2_VideoUpscaler, Apache-2.0. https://github.com/numz/ComfyUI-SeedVR2_VideoUpscaler commit 4490bd1f482e026674543386bb2a4d176da245b9.
 - Difix3D, NVIDIA License. https://github.com/nv-tlabs/Difix3D commit c76edc595586e16732c91ddee82f3a6d83a8a9cc.
 - Recast Navigation, zlib. Copyright (c) 2009 Mikko Mononen. Commit 9f4ce64458dfae86e1239c525ddc219c4e9e06f1.
-- HY-World 2.0 world-generation module. https://github.com/Tencent-Hunyuan/HY-World-2.0 commit df9988efb87bfc0f4947eb3889411cf957478b06. The pinned tree has no LICENSE file.
+- HY-World 2.0 world-generation module (`hyworld2/worldgen`, unmodified), Tencent HY-WORLD 2.0 Community License Agreement. Copyright © 2026 Tencent. https://github.com/Tencent-Hunyuan/HY-World-2.0 commit df9988efb87bfc0f4947eb3889411cf957478b06. The agreement is `vendor/hyworld/HY-World-License.txt` and the required notice is `vendor/hyworld/NOTICE.txt`. The agreement does not apply in the European Union, the United Kingdom, or South Korea, and it carries an Acceptable Use Policy.
 - fused_ssim, MIT. Copyright (c) 2024 Rahul Goel. Copied from the LiteGS tree at commit 409da0b987ff84d5bcc76a1d3040715d27c16527.
 - gsplat 1.5.3, used from the installed package, plus the CUDA extension built for the HY-World trainer.
 - SAM 3, SAM License (Meta, last updated November 19, 2025). https://github.com/facebookresearch/sam3 package version 0.1.0; no commit was recorded for this copy. The code is in `vendor/sam3` and the weights ship as `models/sam3/sam3.pt`. The full agreement is `vendor/sam3/LICENSE`, and the installer also puts a copy at `docs/licenses/SAM_LICENSE.txt`.

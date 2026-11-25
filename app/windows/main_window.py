@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QRadioButton,
+    QScrollArea,
     QSpinBox,
     QSizePolicy,
     QSplitter,
@@ -563,15 +564,27 @@ class MainWindow(QMainWindow):
         lbl.setProperty("class", "viewLbl")
         v.addWidget(lbl)
         self.stat_host = QWidget()
-        self.stat_grid = QGridLayout(self.stat_host)
+        self.stat_host.setObjectName("statHost")
+        self.stat_host.setStyleSheet("#statHost { background: transparent; }")
+        host_lay = QVBoxLayout(self.stat_host)
+        host_lay.setContentsMargins(0, 0, 0, 0)
+        self.stat_grid = QGridLayout()
         self.stat_grid.setContentsMargins(0, 4, 0, 0)
         self.stat_grid.setSpacing(6)
-        v.addWidget(self.stat_host)
+        host_lay.addLayout(self.stat_grid)
+        host_lay.addStretch(1)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setStyleSheet("QScrollArea { background: transparent; }")
+        scroll.viewport().setAutoFillBackground(False)
+        scroll.setWidget(self.stat_host)
+        v.addWidget(scroll, 1)
         note = QLabel("Green is ready. A missing core model blocks that stage.")
         note.setWordWrap(True)
         note.setProperty("class", "fHint")
         v.addWidget(note)
-        v.addStretch(1)
 
         body.addWidget(rail)
         body.addWidget(view, 1)
