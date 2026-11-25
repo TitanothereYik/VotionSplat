@@ -13,7 +13,7 @@ Owner: Yik. License: [MIT](LICENSE). No telemetry. The first audience is a small
   → WAN 2.1 hole-fill (720p) on those rails
   → 8K HiRes composite (WAN only in the holes)
   → SphereSfM, then gnomonic cube faces
-  → LiteGS or MCMC Compact
+  → train the splat
   → splat.ply (full spherical harmonics)
 ```
 
@@ -33,13 +33,7 @@ py -3.12 -m venv .venv
 
 `requirements.lock` records the stack that ran on the dev machine, including `torch==2.11.0+cu128` and `PySide6==6.11.2`. The `+cu128` wheels come from the PyTorch index above.
 
-Train needs the LiteGS CUDA extensions, built on this machine (they are not shipped):
-
-```bat
-.venv\Scripts\python.exe tools\build_litegs.py
-```
-
-That writes a `litegs raster 1-step` line into `docs/env_report.txt`. Train stays off until that line says OK. LiteGS is Inria / Gaussian-Splatting licensed: research and evaluation, built locally, not redistributed. See `vendor/litegs_LICENSE.md`.
+The HY-World train environment is `.venvs\hyworld`, built with `tools\hyworld\install.ps1`.
 
 Start the window:
 

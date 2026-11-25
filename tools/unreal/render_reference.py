@@ -102,8 +102,8 @@ def main() -> int:
         view = tensors
         if raster == "litegs_classic":
             # gsplat classic still draws a splat whose centre is far outside the frame.
-            # LiteGS drops those centres (|ndc| > 1.3). The real alpine scene is covered by them.
-            view = _litegs_visible(tensors, w2c, k, int(camera["W"]), int(camera["H"]), near, device)
+            # The classic raster drops those centres (|ndc| > 1.3). The real alpine scene is covered by them.
+            view = _classic_visible(tensors, w2c, k, int(camera["W"]), int(camera["H"]), near, device)
         with torch.no_grad():
             renders, _alphas, meta = gsplat.rasterization(
                 **view,
@@ -122,7 +122,7 @@ def main() -> int:
     return 0
 
 
-def _litegs_visible(tensors: dict, w2c: np.ndarray, k: np.ndarray, width: int, height: int,
+def _classic_visible(tensors: dict, w2c: np.ndarray, k: np.ndarray, width: int, height: int,
                     near: float, device: str) -> dict:
     import torch
 

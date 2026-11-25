@@ -38,24 +38,15 @@ from engine.hyworld.defaults import HELP_DATASET, HELP_EXPAND, HELP_SPLAT, HELP_
 from engine.hyworld.paths import gs_result, hy_root, latest_checkpoint, votion_dir
 from engine.job import (
     REPO_ROOT,
-    camplot_argv,
     caption_argv,
     detect_fov_argv,
     download_argv,
-    dummy_argv,
-    known_pose_argv,
-    litegs_build_argv,
-    moge_argv,
     pano_argv,
-    pinhole_hires_argv,
-    splat_argv,
     worker_env,
-    worldstereo_argv,
 )
 from engine.pano.defaults import HELP_PANORAMA
 from engine.splat import defaults as D
 from engine.pano.scene_io import scene_dir
-from engine.splat.status import litegs_spike_ok
 
 STAGES = (
     "Home",
@@ -72,7 +63,6 @@ Ostris blocks 2D Generate until READY. h_fov 70. text keeps the trigger prefix.
 After 2D Images, prompt.txt = outpaint instruction + surroundings. Generate strips that green instruction.
 Preview the mesh flight. Four straight rails usually enough. Do not skip 8K. Extra rails do not fix glass.
 Download models: Hub cache is the install folder .hf_cache, ready files in models.
-Build LiteGS: compiles the vendored LiteGS CUDA kernels into this venv once (MSVC + CUDA 12.8), then records the 1-step spike in docs/env_report.txt. Train on the Splat tab is gated on that line. Never shipped in the installer (Inria non-commercial licence).
 
 Votion 3DGS  2.0  Yik  MIT"""
 
@@ -314,10 +304,6 @@ class MainWindow(QMainWindow):
         self._ext_buf = ""
         self._ext_step = ""
         self._ext_ready = False
-        self._sfm_images = "0"
-        self._sfm_points = "0"
-        self._sfm_sparse = ""
-        self._sfm_preview = ""
         self._gpu_names = gpu_names()
         self._manifest = _read_manifest()
 
@@ -493,28 +479,13 @@ class MainWindow(QMainWindow):
         btns = QHBoxLayout()
         self.btn_dl = QPushButton("Download models")
         self.btn_dl.setObjectName("btnPrimary")
-        self.btn_dummy = QPushButton("Dummy job")
-        self.btn_dummy.setObjectName("btnGhost")
         self.btn_stop = QPushButton("Stop")
         self.btn_stop.setObjectName("btnGhost")
         self.btn_dl.clicked.connect(self._start_download)
-        self.btn_dummy.clicked.connect(self._start_dummy)
         self.btn_stop.clicked.connect(self._stop_job)
         btns.addWidget(self.btn_dl)
-        btns.addWidget(self.btn_dummy)
         btns.addWidget(self.btn_stop)
         r.addLayout(btns)
-
-        r.addWidget(self._lab("Splat trainer"))
-        self.btn_litegs = QPushButton("Build LiteGS")
-        self.btn_litegs.setObjectName("btnGhost")
-        self.btn_litegs.clicked.connect(self._start_litegs_build)
-        r.addWidget(self.btn_litegs)
-        self.litegs_hint = QLabel("")
-        self.litegs_hint.setWordWrap(True)
-        self.litegs_hint.setProperty("class", "fHint")
-        r.addWidget(self.litegs_hint)
-        self._refresh_litegs_hint()
         r.addStretch(1)
 
         view = QWidget()
@@ -726,7 +697,6 @@ class MainWindow(QMainWindow):
         self.radio_p1.setEnabled(enabled)
         self.radio_all.setEnabled(enabled)
         self.btn_dl.setEnabled(enabled)
-        self.btn_dummy.setEnabled(enabled)
 
     def _arm_download_bars(self) -> None:
         wanted = "p1" if self._download_set() == "p1" else "all"
@@ -820,37 +790,6 @@ class MainWindow(QMainWindow):
             self.pano_page.apply_pano(raw.split("\t", 1)[1])
             self._append_log(raw)
             return
-        if raw.startswith("GEO\t"):
-            parts = raw.split("\t")
-            if len(parts) >= 3 and parts[1] == "json" and hasattr(self, "geo_page"):
-                self.geo_page.apply_geometry(parts[2])
-            self._append_log(raw)
-            return
-        if raw.startswith("CAMPLOT\t"):
-            parts = raw.split("\t")
-            if len(parts) >= 3 and hasattr(self, "geo_page"):
-                self.geo_page.apply_camplot(parts[1], parts[2])
-            self._append_log(raw)
-            return
-        if raw.startswith("SFM\t"):
-            parts = raw.split("\t")
-            kind = parts[1] if len(parts) > 1 else ""
-            if kind == "num_images" and len(parts) >= 3:
-                self._sfm_images = parts[2]
-            elif kind == "num_points" and len(parts) >= 3:
-                self._sfm_points = parts[2]
-            elif kind == "sparse" and len(parts) >= 3:
-                self._sfm_sparse = parts[2]
-            elif kind == "preview" and len(parts) >= 3:
-                self._sfm_preview = parts[2]
-            imgs = int(getattr(self, "_sfm_images", "0") or 0)
-            pts = int(getattr(self, "_sfm_points", "0") or 0)
-            # Counts only while SphereSfM is still exiting. Viewport loads in
-            # on_sfm_finished so it always reads the files this run just wrote.
-            if hasattr(self, "recon_page"):
-                self.recon_page.apply_sfm(imgs, pts, "", getattr(self, "_sfm_preview", ""))
-            self._append_log(raw)
-            return
         if raw.startswith("SPLAT\t"):
             parts = raw.split("\t")
             kind = parts[1] if len(parts) > 1 else ""
@@ -864,20 +803,6 @@ class MainWindow(QMainWindow):
             self._log_splat_line(parts, raw)
             return
         if raw.startswith("WAN\t") or raw.startswith("HIRES\t"):
-            self._append_log(raw)
-            return
-        if raw.startswith("WS\t"):
-            parts = raw.split("\t")
-            if hasattr(self, "gen_page") and len(parts) >= 2:
-                kind = parts[1]
-                if kind == "view" and len(parts) >= 4:
-                    self.gen_page.show_ws(int(parts[2]), "view", view=parts[3])
-                elif kind == "retrieved" and len(parts) >= 4:
-                    self.gen_page.show_ws(int(parts[2]), "retrieved", int(parts[3]))
-                elif kind == "rail" and len(parts) >= 4:
-                    self.gen_page.show_ws(int(parts[2]), parts[3])
-                elif kind == "inputs":
-                    self.gen_page.refresh(keep_preview=True)
             self._append_log(raw)
             return
         if raw.startswith("HY\t"):
@@ -918,112 +843,6 @@ class MainWindow(QMainWindow):
             self._start_job(detect_fov_argv(args[1]), "detect_fov")
             return
         self._start_job(pano_argv(args), "pano")
-
-    def _on_geo_job(self, args: list[str]) -> None:
-        if not args:
-            return
-        if args[0] == "__geo_error__":
-            self._append_log(f"STATUS // {args[1] if len(args) > 1 else 'geometry error'}")
-            return
-        if args[0] == "__moge__":
-            scene = args[1] if len(args) > 1 else self.scene.text()
-            self._start_job(moge_argv(scene), "moge")
-            return
-        if args[0] == "__camplot__":
-            scene = args[1] if len(args) > 1 else self.scene.text()
-            rail = int(args[2]) if len(args) > 2 else 0
-            if not self._start_job(camplot_argv(scene, rail), "camplot"):
-                self.geo_page.on_camplot_busy()
-            return
-        if args[0] == "__geo_log__":
-            self._append_log(args[1] if len(args) > 1 else "")
-            return
-        if args[0] == "__confirmed__":
-            self._append_log("STATUS // Confirm rails — Generate unlocked")
-            if hasattr(self, "recon_page"):
-                self.recon_page.refresh()
-            if hasattr(self, "gen_page"):
-                self.gen_page.refresh()
-            return
-
-    def _rails_from_request(self, scene: str, req: str) -> list[int]:
-        path = Path(req)
-        if path.is_file():
-            data = json.loads(path.read_text(encoding="utf-8"))
-            saved = data.get("rails")
-            if isinstance(saved, list) and saved:
-                return [int(i) for i in saved]
-        from engine.geo.rails import kept_rail_indices
-
-        kept = kept_rail_indices(scene)
-        return kept or [0]
-
-    def _on_gen_job(self, args: list[str]) -> None:
-        if not args:
-            return
-        if args[0] == "__gen_error__":
-            self._append_log(f"STATUS // {args[1] if len(args) > 1 else 'generate error'}")
-            return
-        if args[0] == "__ws_hires__":
-            if self._job_running():
-                self._append_log("STATUS // busy — Stop the current job first")
-                return
-            scene = args[1] if len(args) > 1 else self.scene.text()
-            source = args[2] if len(args) > 2 and args[2] in ("world", "frame") else "world"
-            kind = "WorldStereo upscale" if source == "frame" else "panorama composite"
-            self._append_log(f"STATUS // HiRes all for {scene} — {kind}")
-            if hasattr(self, "gen_page"):
-                rails = getattr(self.gen_page, "_ws_order", None) or []
-                self.gen_page.on_generate_start(rails, kind="pinhole_hires")
-            self._start_job(pinhole_hires_argv(scene, source), "pinhole_hires")
-            return
-        if args[0] == "__worldstereo__":
-            if self._job_running():
-                self._append_log("STATUS // busy — Stop the current job first")
-                return
-            scene = args[1] if len(args) > 1 else self.scene.text()
-            req = args[2] if len(args) > 2 else ""
-            rails = [int(part) for part in (args[3] if len(args) > 3 else "").split(",") if part.strip()]
-            run_mode = args[4] if len(args) > 4 else "resume"
-            seed = int(args[5]) if len(args) > 5 and str(args[5]).strip() else None
-            regen_text = args[6] if len(args) > 6 else ""
-            regen = int(regen_text) if str(regen_text).strip() else None
-            gen_mode = args[7].strip() if len(args) > 7 and str(args[7]).strip() else "joint"
-            self._append_log(
-                f"STATUS // WorldStereo request for {scene} rails={rails} mode={run_mode} generation={gen_mode}"
-            )
-            if hasattr(self, "gen_page"):
-                self.gen_page.on_generate_start(rails, kind="worldstereo")
-            self._start_job(
-                worldstereo_argv(
-                    scene,
-                    mode=gen_mode,
-                    resume=run_mode != "restart",
-                    regen_rail=regen,
-                    request=req or None,
-                    rails=rails or None,
-                    seed=seed,
-                ),
-                "worldstereo",
-            )
-            return
-
-    def _on_recon_job(self, args: list[str]) -> None:
-        if not args:
-            return
-        if args[0] == "__dataset__":
-            if hasattr(self, "gen_page"):
-                self.gen_page.refresh(keep_preview=True)
-            if hasattr(self, "recon_page"):
-                self.recon_page.refresh()
-            return
-        if args[0] == "__known_pose__":
-            scene = args[1] if len(args) > 1 else self.scene.text()
-            self._sfm_images = "0"
-            self._sfm_points = "0"
-            self._sfm_sparse = ""
-            self._sfm_preview = ""
-            self._start_job(known_pose_argv(scene), "known_pose")
 
     # 10-step telemetry (step / loss / psnr / its / vram / fps / gaussians) stays in the
     # HUD; the log drawer gets controller events, checkpoints, exports, errors, state.
@@ -1165,41 +984,6 @@ class MainWindow(QMainWindow):
         if self._want_splat_view and not self._job_running():
             QTimer.singleShot(500, self._ensure_splat_view)
 
-    def _on_splat_job(self, args: list[str]) -> None:
-        """["__splat__", scene, strategy_key, mode, steps, budget, res_scale, holdout, color_space]"""
-        if not args or args[0] != "__splat__":
-            return
-        scene = args[1] if len(args) > 1 else self.scene.text()
-        strategy = args[2] if len(args) > 2 else "litegs"
-        mode = args[3] if len(args) > 3 else "train"
-
-        def _int(i: int):
-            try:
-                return int(args[i]) if len(args) > i else None
-            except ValueError:
-                return None
-
-        max_steps = _int(4)
-        budget = _int(5)
-        try:
-            res_scale = float(args[6]) if len(args) > 6 else None
-        except ValueError:
-            res_scale = None
-        holdout = len(args) > 7 and args[7] == "1"
-        color_space = args[8] if len(args) > 8 and args[8] else None
-        argv = splat_argv(
-            scene,
-            strategy,
-            mode,
-            max_steps=max_steps,
-            budget=budget,
-            res_scale=res_scale,
-            holdout=holdout,
-            color_space=color_space,
-        )
-        if self._start_job(argv, "splat"):
-            self.splat_page.on_worker_started("train")
-
     def _on_traj_job(self, args: list) -> None:
         kind = args[0] if args else ""
         scene = args[1] if len(args) > 1 else self.scene.text()
@@ -1310,25 +1094,6 @@ class MainWindow(QMainWindow):
 
     def _start_download(self) -> None:
         self._start_job(download_argv(self._download_set()), "download")
-
-    def _start_dummy(self) -> None:
-        self._start_job(dummy_argv(), "dummy")
-
-    def _start_litegs_build(self) -> None:
-        self._start_job(litegs_build_argv(), "litegs")
-
-    def _refresh_litegs_hint(self) -> None:
-        if not hasattr(self, "litegs_hint"):
-            return
-        from engine.splat.status import litegs_spike_detail
-
-        if litegs_spike_ok():
-            self.litegs_hint.setText("LiteGS spike OK — Splat Train enabled. " + litegs_spike_detail())
-        else:
-            self.litegs_hint.setText(
-                "Splat Train is off until this passes. Builds simple-knn, fused_ssim and "
-                "litegs_fused with MSVC + CUDA 12.8 (2 to 5 min). " + litegs_spike_detail()
-            )
 
     def _start_job(self, argv: list[str], label: str) -> bool:
         if self._job_running():

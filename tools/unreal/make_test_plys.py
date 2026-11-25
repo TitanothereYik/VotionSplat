@@ -85,7 +85,7 @@ def main() -> int:
         np.stack([gx.ravel(), gy.ravel(), np.full(gx.size, 8.0)], axis=1),
         t4_scale, [1, 0, 0, 0], [0.7, 0.75, 0.8], np.full(gx.size, _logit(0.95)),
     ), raster, near, 0)
-    _write("T4_subpixel_litegs", _pack(
+    _write("T4_subpixel_classic", _pack(
         np.stack([gx.ravel(), gy.ravel(), np.full(gx.size, 8.0)], axis=1),
         t4_scale, [1, 0, 0, 0], [0.7, 0.75, 0.8], np.full(gx.size, _logit(0.95)),
     ), "litegs_classic", 0.2, 0)
@@ -103,7 +103,7 @@ def main() -> int:
     rest = (rng.normal(size=(15, 3, 2000)) * 0.3).astype(np.float32)
     _write("T6_sh3", _pack(means, np.full((2000, 3), 0.03), [1, 0, 0, 0],
                            np.full((2000, 3), 0.5), np.full(2000, _logit(0.8)), rest), raster, near, 3)
-    _write("T6_sh3_litegs", _pack(means, np.full((2000, 3), 0.03), [1, 0, 0, 0],
+    _write("T6_sh3_classic", _pack(means, np.full((2000, 3), 0.03), [1, 0, 0, 0],
                                   np.full((2000, 3), 0.5), np.full(2000, _logit(0.8)), rest),
            "litegs_classic", 0.2, 3)
 

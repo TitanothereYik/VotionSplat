@@ -13,8 +13,7 @@ Measured on this PC (torch 2.11.0+cu128, gsplat 1.5.3, CUDA toolkit 12.8, MSVC 1
 
 3. ``torch/csrc/dynamo/compiled_autograd.h`` ``IValuePacker<T>::packed_type()`` uses
    ``if constexpr (::std::is_same_v<T, ::std::string>)``. Any ``.cu`` translation unit
-   that includes ``torch/extension.h`` (LiteGS ``simple-knn``, ``fused_ssim``,
-   ``gaussian_raster``) fails under nvcc 12.8 + MSVC 14.43 with
+   that includes ``torch/extension.h`` (``fused_ssim``, ``gaussian_raster``) fails under nvcc 12.8 + MSVC 14.43 with
    ``error C2872: 'std': ambiguous symbol`` (measured 2026-09-07, torch 2.11.0+cu128).
    torch already skips that body when ``_WIN32 && USE_CUDA`` (its own Windows build,
    see pytorch/pytorch#144707); extensions do not define ``USE_CUDA``. The patch adds
@@ -22,7 +21,7 @@ Measured on this PC (torch 2.11.0+cu128, gsplat 1.5.3, CUDA toolkit 12.8, MSVC 1
    branch. compiled autograd is unsupported on Windows anyway.
 
 4. This PC's CUDA 12.8 toolkit is a partial install: ``include/`` has no cuSPARSE,
-   cuBLAS or cuSOLVER headers, but LiteGS ``compact.cu`` includes
+   cuBLAS or cuSOLVER headers, but a CUDA extension's ``compact.cu`` includes
    ``<ATen/cuda/CUDAContext.h>`` which needs ``cusparse.h``, ``cublas_v2.h``,
    ``cublasLt.h`` and ``cusolverDn.h`` for declarations only (nothing links against
    them). ``apply_cuda_math_headers()`` appends the include dir of a sibling 12.x

@@ -44,10 +44,6 @@ def python_executable() -> str:
     return str(exe)
 
 
-def dummy_argv() -> list[str]:
-    return [python_executable(), "-m", "engine.workers.dummy"]
-
-
 def pano_argv(args: list[str]) -> list[str]:
     return [python_executable(), "-m", "engine.workers.pano", *args]
 
@@ -58,118 +54,6 @@ def caption_argv(image: str) -> list[str]:
 
 def detect_fov_argv(image: str) -> list[str]:
     return [python_executable(), "-m", "engine.workers.detect_fov", "--image", image]
-
-
-def moge_argv(scene: str) -> list[str]:
-    return [python_executable(), "-m", "engine.workers.moge", "--scene", scene]
-
-
-def camplot_argv(scene: str, rail: int = 0) -> list[str]:
-    return [
-        python_executable(),
-        "-m",
-        "engine.workers.camplot",
-        "--scene",
-        scene,
-        "--rail",
-        str(int(rail)),
-    ]
-
-
-def known_pose_argv(scene: str) -> list[str]:
-    return [python_executable(), "-m", "engine.workers.known_pose", "--scene", scene]
-
-
-def splat_argv(
-    scene: str,
-    strategy: str,
-    mode: str,
-    max_steps: int | None = None,
-    budget: int | None = None,
-    res_scale: float | None = None,
-    holdout: bool = False,
-    color_space: str | None = None,
-) -> list[str]:
-    """LiteGS trainer worker. ``strategy`` is a defaults.STRATEGY_KEYS key (litegs | mcmc_compact)."""
-    args = [
-        python_executable(),
-        "-m",
-        "engine.workers.splat",
-        "--scene",
-        scene,
-        "--strategy",
-        strategy,
-        "--mode",
-        mode,
-    ]
-    if max_steps is not None:
-        args.extend(["--max-steps", str(int(max_steps))])
-    if budget is not None:
-        args.extend(["--budget", str(int(budget))])
-    if res_scale is not None and abs(float(res_scale) - 1.0) > 1e-9:
-        args.extend(["--res-scale", str(float(res_scale))])
-    if holdout:
-        args.append("--holdout")
-    if color_space:
-        args.extend(["--color-space", str(color_space)])
-    return args
-
-
-def worldstereo_argv(
-    scene: str,
-    *,
-    mode: str = "joint",
-    resume: bool = True,
-    regen_rail: int | None = None,
-    prepare_only: bool = False,
-    request: str | None = None,
-    rails: list[int] | None = None,
-    seed: int | None = None,
-) -> list[str]:
-    """One process for the whole scene. ``mode`` is joint or rail."""
-    args = [
-        python_executable(),
-        "-m",
-        "engine.workers.worldstereo",
-        "--scene",
-        scene,
-        "--mode",
-        str(mode or "joint"),
-    ]
-    if not resume:
-        args.append("--restart")
-    if regen_rail is not None:
-        args.extend(["--regen-rail", str(int(regen_rail))])
-    if prepare_only:
-        args.append("--prepare-only")
-    if request:
-        args.extend(["--request", str(request)])
-    if rails:
-        args.extend(["--rails", ",".join(str(int(i)) for i in rails)])
-    if seed is not None:
-        args.extend(["--seed", str(int(seed))])
-    return args
-
-
-def pinhole_hires_argv(scene: str, source: str = "world") -> list[str]:
-    return [
-        python_executable(),
-        "-m",
-        "engine.workers.pinhole_hires",
-        "--scene",
-        scene,
-        "--source",
-        source,
-    ]
-
-
-def litegs_build_argv(rebuild: bool = False) -> list[str]:
-    """Setup (Home): build the vendored LiteGS CUDA extensions + run the 1-step spike."""
-    script = REPO_ROOT / "tools" / "build_litegs.py"
-    args = [python_executable(), str(script)]
-    if rebuild:
-        args.append("--rebuild")
-    return args
 
 
 def download_argv(download_set: str) -> list[str]:

@@ -49,7 +49,7 @@ def main() -> int:
     )
     print("\n".join(apply_file_patches(site)), flush=True)
 
-    fused = REPO / "vendor" / "litegs" / "litegs" / "submodules" / "fused_ssim"
+    fused = REPO / "vendor" / "fused_ssim"
     if fused.is_dir():
         _run([sys.executable, "-m", "pip", "install", "--no-build-isolation", str(fused)], REPO)
     return 0

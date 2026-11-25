@@ -35,19 +35,5 @@
             "sha256": "85804badcad45a0b31e3154fc06a86a09eb79b7792b73b360c3954cd6a96038d",
             "source": "vendor/splatkit/core/spheresfm_colmap.py _BUNDLES win64 at pin f59de25. Do not invent a hash."
         }
-    },
-    "litegs": {
-        "repo": "https://github.com/MooreThreads/LiteGS",
-        "branch": "master",
-        "sha": "004b95215c90c36cdaf4b354301132b700ac287b",
-        "source": "Pinned 2026-09-07. git clone --recurse-submodules HEAD of master measured on this PC (commit 2026-03-09 'remove: delete obsolete/unused scripts').",
-        "license": "Gaussian-Splatting License (Inria / MPII; Moore Threads derivative). Research and evaluation only, no commercial use without Inria consent. Built locally at Setup, never redistributed.",
-        "sha_file": "vendor/litegs.sha",
-        "submodules": {
-            "fused_ssim": "409da0b987ff84d5bcc76a1d3040715d27c16527 (branch fused-l1-ssim-loss)",
-            "simple-knn": "in-tree",
-            "gaussian_raster": "in-tree (litegs_fused)"
-        },
-        "build": "tools/build_litegs.py: pip --no-build-isolation first; CMake (Ninja) fallback for litegs_fused. Logs in vendor/litegs_build/."
     }
 }

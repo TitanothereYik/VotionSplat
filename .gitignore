@@ -23,8 +23,6 @@ bin/**
 !bin/.gitkeep
 vendor/splatkit/**
 !vendor/splatkit/.gitkeep
-vendor/moge/**
-!vendor/moge/.gitkeep
 vendor/comfyui/**
 !vendor/comfyui/.gitkeep
 vendor/ultimatesd/**
@@ -33,9 +31,8 @@ vendor/mickmumpitz-nodes/**
 !vendor/mickmumpitz-nodes/.gitkeep
 vendor/ostris-edit/**
 !vendor/ostris-edit/.gitkeep
-vendor/litegs/**
-!vendor/litegs/.gitkeep
-vendor/litegs_build/**
+vendor/fused_ssim/**
+!vendor/fused_ssim/.gitkeep
 vendor/worldstereo/**
 !vendor/worldstereo/.gitkeep
 vendor/seedvr2/**

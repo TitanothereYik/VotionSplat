@@ -13,7 +13,7 @@ from PIL import Image
 THRESHOLDS = {
     "synthetic": {"mean": 0.35, "p999": 1.5, "max": 3.0},
     "gsplat": {"mean": 0.6, "p999": 3.0, "frac8": 1e-4},
-    "litegs": {"mean": 1.5, "p99": 4.0},
+    "classic": {"mean": 1.5, "p99": 4.0},
     "ocio": {"mean": 0.8, "p999": 4.0},
 }
 

@@ -1,6 +1,6 @@
 """3DGS PLY writer — VotionSplat, Postshot, Brush, SuperSplat.
 
-Input is the LiteGS unclustered layout from ``LiteGSBackend.unclustered_numpy()``:
+Input is the unclustered splat layout:
 xyz ``[3,N]``, scale (log) ``[3,N]``, rot (wxyz, normalized) ``[4,N]``, sh_0 ``[1,3,N]``,
 sh_rest ``[K-1,3,N]``, opacity (logit) ``[1,N]``. Property order follows the reference
 Inria 3DGS ``save_ply``: x y z nx ny nz f_dc_0..2 f_rest_0..(3(K-1)-1) opacity
@@ -85,7 +85,7 @@ def bake_sh_color(
         return sh0, shr
 
     dc = np.asarray(sh0[0], dtype=np.float64)  # [3, N]
-    rgb = dc * SH_C0 + 0.5  # 3DGS / LiteGS display-referred eval at DC
+    rgb = dc * SH_C0 + 0.5  # display-referred eval at DC
     rgb_clip = np.clip(rgb, 0.0, 1.0)
     lin = _srgb_to_linear(rgb_clip)
     jac = _srgb_to_linear_grad(rgb_clip)
@@ -226,7 +226,7 @@ def read_ply_header(path: Path) -> dict:
 
 
 def load_splat_ply_arrays(path: Path) -> dict:
-    """Read an Inria splat PLY into the LiteGS unclustered layout for ``write_splat_ply``."""
+    """Read an Inria splat PLY into the layout ``write_splat_ply`` expects."""
     path = Path(path)
     with path.open("rb") as f:
         names: list[str] = []
