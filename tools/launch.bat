@@ -3,13 +3,13 @@ setlocal
 cd /d "%~dp0.."
 if not exist ".venv\Scripts\python.exe" (
   echo Venv missing. Create it with:
-  echo   py -3.12 -m venv D:\Votion3DGS\.venv
+  echo   py -3.12 -m venv .venv
   pause
   exit /b 1
 )
 set PYTHONPATH=%CD%
 set PYTHONUNBUFFERED=1
-REM Hub downloads must land on this drive (D:), not C:\Users\…\.cache\huggingface
+REM Hub downloads must land on this drive (D:), not C:\Users\...\.cache\huggingface
 set HF_HOME=%CD%\.hf_cache
 set HF_HUB_CACHE=%CD%\.hf_cache\hub
 set HF_XET_CACHE=%CD%\.hf_cache\xet

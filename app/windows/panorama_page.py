@@ -1,4 +1,4 @@
-"""Phase 1 Panorama page — dummy docs/Votion_3DGS_2.0_Phase1.html §01."""
+"""Panorama page. See docs/USER_GUIDE.md."""
 
 from __future__ import annotations
 

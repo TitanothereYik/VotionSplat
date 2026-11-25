@@ -42,7 +42,7 @@ MIN_RAILS = 1  # rail 1 (SMPL node 27) stays; user may remove 2–5
 MAX_RAILS = 5  # graph CAMERA 1–4 + optional Add-to-dataset id 157
 SUGGEST_COUNT = 4  # suggest_paths default from the pin; function cap is 8
 
-# SMPL demo rails — copy verbatim from docs/Votion_3DGS_2.0_Phase3.md (then let the user edit).
+# SMPL demo rails. See docs/USER_GUIDE.md. The user can edit these.
 SMPL_RAILS = (
     {
         "node": 27,

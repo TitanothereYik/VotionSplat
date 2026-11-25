@@ -1,4 +1,4 @@
-/* Votion 3DGS 2.0 — tokens ported from Yik Votion WorldFM/ui/theme.css
+/* VotionSplat 3.0 — tokens ported from Yik Votion WorldFM/ui/theme.css
    (JetBrains Mono, dark cyanotype). Layout chrome from docs/votion-plan.css .desk* .
    Do not invent a new brand palette. */
 
@@ -19,6 +19,10 @@ QLabel#brandTitle {
   color: #f0f0f0;
   font-weight: 700;
   font-size: 15px;
+}
+
+QLabel#brandBanner {
+  padding: 0;
 }
 
 QLabel#liveBadge {

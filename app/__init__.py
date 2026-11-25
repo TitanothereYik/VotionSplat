@@ -1,1 +1,1 @@
-"""Votion 3DGS 2.0 — PySide6 application package."""
+"""VotionSplat 3.0 — PySide6 application package."""

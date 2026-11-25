@@ -1,4 +1,4 @@
-"""Phase 0 Home window — chrome from docs/Votion_3DGS_2.0_Phase0.html §02."""
+"""Home window. See docs/USER_GUIDE.md."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import subprocess
 from pathlib import Path
 
 from PySide6.QtCore import QProcess, QProcessEnvironment, Qt, QTimer, Signal
-from PySide6.QtGui import QCloseEvent, QColor, QFont, QTextBlockFormat, QTextCharFormat, QTextCursor
+from PySide6.QtGui import QCloseEvent, QColor, QFont, QPixmap, QTextBlockFormat, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import (
     QButtonGroup,
     QComboBox,
@@ -62,7 +62,7 @@ Download what this machine is missing, then work left to right: Panorama, Trajec
 Core is every stage. Core + optional adds Difix cleanup and Florence-2 captions.
 Weight files land in models. Hub snapshots land in .hf_cache. SAM 3 is already in the install.
 
-VotionSplat  3.0"""
+VotionSplat  3.0  Yik  MIT"""
 
 LOG_IDLE = """STATUS // idle
 Qt never imports torch. Dummy worker: 20 lines then exit. Stop kills the subprocess."""
@@ -293,7 +293,9 @@ class JobStrip(QWidget):
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Votion 3DGS")
+        from app.version import APP_NAME, APP_VERSION
+
+        self.setWindowTitle(f"{APP_NAME} {APP_VERSION}")
         self.resize(1180, 760)
         self._proc: QProcess | None = None
         self._splat_view_proc: QProcess | None = None
@@ -354,8 +356,16 @@ class MainWindow(QMainWindow):
         bar.setObjectName("brandBar")
         row = QHBoxLayout(bar)
         row.setContentsMargins(10, 8, 10, 8)
-        title = QLabel("Votion 3DGS")
-        title.setObjectName("brandTitle")
+        from app.version import APP_NAME
+
+        banner = Path(__file__).resolve().parents[1] / "assets" / "banner.png"
+        if banner.is_file():
+            title = QLabel()
+            title.setObjectName("brandBanner")
+            title.setPixmap(QPixmap(str(banner)).scaledToHeight(64, Qt.SmoothTransformation))
+        else:
+            title = QLabel(APP_NAME)
+            title.setObjectName("brandTitle")
         self.live = QLabel("idle")
         self.live.setObjectName("liveBadge")
         self.gpu_chip = QLabel(self._gpu_label())
