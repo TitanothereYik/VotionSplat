@@ -16,6 +16,9 @@ from engine.job import REPO_ROOT
 UMT5_FILE = "umt5_xxl_fp8_e4m3fn_scaled.safetensors"
 VAE_FILE = "wan_2.1_vae.safetensors"
 CLIP_VISION_FILE = "clip_vision_h.safetensors"
+# Home downloads vae/config.json from this snapshot (manifest id wan_vae_config).
+VAE_CONFIG_REPO = "Wan-AI/Wan2.1-T2V-14B-Diffusers"
+VAE_CONFIG_REVISION = "38ec498cb3208fb688890f8cc7e94ede2cbd7f68"
 
 MODELS = REPO_ROOT / "models"
 UMT5 = MODELS / "text_encoders" / UMT5_FILE
@@ -75,8 +78,14 @@ def load_umt5(cfg_root: Path):
 
 def load_vae():
     from diffusers import AutoencoderKLWan
+    from huggingface_hub import try_to_load_from_cache
 
-    vae = _from_single_file(AutoencoderKLWan, VAE, dtype=torch.bfloat16)
+    kwargs = {"dtype": torch.bfloat16}
+    cached = try_to_load_from_cache(VAE_CONFIG_REPO, "vae/config.json", revision=VAE_CONFIG_REVISION)
+    if isinstance(cached, str):
+        kwargs["config"] = str(Path(cached).parents[1])
+        kwargs["subfolder"] = "vae"
+    vae = _from_single_file(AutoencoderKLWan, VAE, **kwargs)
     vae.enable_tiling()
     vae.eval()
     return vae

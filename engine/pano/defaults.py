@@ -187,7 +187,6 @@ FLORENCE_REVISION = "4271c66b88cdbc05735372ec13b2360108de5317"
 FLORENCE_TASK = "<CAPTION>"
 
 HELP_PANORAMA = """PANORAMA
-graph how-to (MarkdownNote id 4) · Votion labels
 
 Pick 2D Images (your photo is placed on the sphere, Krea 2 + Ostris Edit + ERP outpaint LoRA fills the rest), 360 Images (load a 2:1 ERP; skip Krea), or text (Krea 2 + 360 LoRA paints the pano from the scene prompt). Only the selected mode is computed.
 

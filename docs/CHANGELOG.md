@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.0.1
+
+- Align and Expand stay offline: DINOv2 loads from `models/dinov2-base`, and the Wan VAE config is a core Home download.
+- The install check fails if a venv still points at the build machine's Python.
+- The desktop shortcut is a choice in the installer. Uninstall removes the app, the environments, and the Python caches, and keeps `models`, `outputs`, and `.hf_cache`.
+- The installer ships `docs/unreal/VS_OCIO.ocio` and the SAM License.
+- THIRD_PARTY_NOTICES lists SAM 3 and the downloaded model weights, plus the GPL note for the installer.
+- Panorama, Home, and log labels no longer show internal graph and phase names.
+- The top banner keeps a fixed 150 px height. On wide windows the space past the art is black.
+- README and the user guide show real app screenshots.
+
 ## 3.0.0
 
 - The app is VotionSplat 3.0.0. The repository is TitanothereYik/VotionSplat.

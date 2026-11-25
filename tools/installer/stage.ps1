@@ -18,6 +18,7 @@ $excludeDirs = @(
     "$Root\models",
     "$Root\Logo_and_Banners",
     "$Root\site_mockup",
+    "$Root\UI_Dummy",
     "$Root\unreal",
     "$Root\.venvs\wheels",
     "$Root\.venvs\src",
@@ -28,7 +29,7 @@ $excludeDirs = @(
     "$Root\.venvs\empty_ext",
     "__pycache__"
 )
-& robocopy $Root $Stage /MIR /XD $excludeDirs /XF *.log expand_fit.json hires_fit.json /NFL /NDL /NJH /NJS /nc /ns /np
+& robocopy $Root $Stage /MIR /XD $excludeDirs /XF *.log expand_fit.json hires_fit.json notk_only.txt /NFL /NDL /NJH /NJS /nc /ns /np
 if ($LASTEXITCODE -ge 8) {
     throw "robocopy failed with exit $LASTEXITCODE"
 }
@@ -48,7 +49,8 @@ $dirs = @(
     "models\sam3",
     "models\dinov2-base",
     "models\clip_vision",
-    "docs"
+    "docs\unreal",
+    "docs\licenses"
 )
 foreach ($rel in $dirs) {
     New-Item -ItemType Directory -Force -Path (Join-Path $Stage $rel) | Out-Null
@@ -58,8 +60,10 @@ Copy-Item -LiteralPath "$Root\models\sam3\sam3.pt" -Destination "$Stage\models\s
 Copy-Item -LiteralPath "$Root\unreal\dist\VotionSplat-UnrealPlugin" -Destination "$Stage\unreal_plugin\VotionSplat-UnrealPlugin" -Recurse -Force
 Copy-Item -LiteralPath "$Root\docs\INSTALL.md" -Destination "$Stage\docs\INSTALL.md" -Force
 Copy-Item -LiteralPath "$Root\docs\UNREAL_EXPORT.md" -Destination "$Stage\docs\UNREAL_EXPORT.md" -Force
+Copy-Item -LiteralPath "$Root\docs\unreal\VS_OCIO.ocio" -Destination "$Stage\docs\unreal\VS_OCIO.ocio" -Force
 Copy-Item -LiteralPath "$Root\THIRD_PARTY_NOTICES.md" -Destination "$Stage\docs\THIRD_PARTY_NOTICES.md" -Force
 Copy-Item -LiteralPath "$Root\LICENSE" -Destination "$Stage\docs\LICENSE" -Force
+Copy-Item -LiteralPath "$Root\vendor\sam3\LICENSE" -Destination "$Stage\docs\licenses\SAM_LICENSE.txt" -Force
 
 $python = "$env:LOCALAPPDATA\Programs\Python\Python312"
 if (-not (Test-Path "$python\python.exe")) {

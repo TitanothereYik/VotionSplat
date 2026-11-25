@@ -1,5 +1,5 @@
 ; VotionSplat 3.0 installer. AppId stays the same for upgrades.
-#define AppVersion "3.0.0"
+#define AppVersion "3.0.1"
 
 [Setup]
 AppId={{8F3C2A1E-7B64-4D19-9C5A-2E6F0B8D4A17}}
@@ -33,9 +33,12 @@ Name: "{app}"; Permissions: users-modify
 Source: "D:\VotionSplat_build\stage\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "D:\VotionSplat_build\redist\vc_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 
+[Tasks]
+Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Shortcuts:"
+
 [Icons]
 Name: "{group}\VotionSplat"; Filename: "{app}\.venv\Scripts\pythonw.exe"; Parameters: "-m app.main"; WorkingDir: "{app}"; IconFilename: "{app}\app\assets\icon.ico"; AppUserModelID: "Yik.VotionSplat.3"
-Name: "{autodesktop}\VotionSplat"; Filename: "{app}\.venv\Scripts\pythonw.exe"; Parameters: "-m app.main"; WorkingDir: "{app}"; IconFilename: "{app}\app\assets\icon.ico"; AppUserModelID: "Yik.VotionSplat.3"
+Name: "{autodesktop}\VotionSplat"; Filename: "{app}\.venv\Scripts\pythonw.exe"; Parameters: "-m app.main"; WorkingDir: "{app}"; IconFilename: "{app}\app\assets\icon.ico"; AppUserModelID: "Yik.VotionSplat.3"; Tasks: desktopicon
 Name: "{group}\VotionSplat install check"; Filename: "{app}\install_check.log"
 
 [Registry]
@@ -48,7 +51,19 @@ Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Fil
 Filename: "{app}\.venv\Scripts\pythonw.exe"; Parameters: "-m app.main"; WorkingDir: "{app}"; Description: "Launch VotionSplat"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
+; Python writes __pycache__ and run_stage writes .venvs\hyworld\cuda_wheel after install.
+; models, outputs and .hf_cache are user data and stay.
 Type: files; Name: "{app}\install_check.log"
+Type: filesandordirs; Name: "{app}\.venv"
+Type: filesandordirs; Name: "{app}\.venvs"
+Type: filesandordirs; Name: "{app}\runtime"
+Type: filesandordirs; Name: "{app}\app"
+Type: filesandordirs; Name: "{app}\engine"
+Type: filesandordirs; Name: "{app}\tools"
+Type: filesandordirs; Name: "{app}\vendor"
+Type: filesandordirs; Name: "{app}\unreal_plugin"
+Type: filesandordirs; Name: "{app}\docs"
+Type: filesandordirs; Name: "{app}\bin"
 
 [Code]
 function InitializeSetup(): Boolean;

@@ -10,7 +10,7 @@
 
 ## Install
 
-1. Run `VotionSplat-3.0.0-Setup` from the company share. The share path is not fixed in this file yet.
+1. Run `VotionSplat-3.0.1-Setup` from the company share. The share path is not fixed in this file yet.
 2. Install to `C:\VotionSplat`, or another folder you can write to. Do not use Program Files. The app stores models and outputs inside its own folder.
 3. The setup installs the VC++ runtime, points the Python environments at the bundled Python, and writes `install_check.log`.
 4. Open VotionSplat from the Start Menu.

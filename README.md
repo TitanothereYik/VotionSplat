@@ -13,7 +13,9 @@ Windows app that turns a photo, a 360 panorama, or a sentence into a Gaussian sp
 5. **Dataset** writes the training images, depth, and normals.
 6. **Splat** trains the splat, optionally refines it, and exports `splat.ply`.
 
-![VotionSplat](docs/media/screenshots/app-01.png)
+![VotionSplat Home](docs/media/screenshots/app-home.png)
+
+![VotionSplat Splat page](docs/media/screenshots/app-splat.png)
 
 ## Install (company machines)
 

@@ -50,6 +50,23 @@ class _NoSkyModel:
         return []
 
 
+def _pin_dinov2() -> None:
+    """HY-World loads facebook/dinov2-base from the hub; Home installs it in models/dinov2-base."""
+    from src.retrieval_wm import CameraSelector
+
+    local_dir = Path(__file__).resolve().parents[2] / "models" / "dinov2-base"
+
+    def _load_model(self, extractor: str) -> None:
+        if extractor != "dinov2":
+            raise ValueError(f"Unknown feature extractor: {extractor}")
+        from transformers import AutoImageProcessor, AutoModel
+
+        self.processor = AutoImageProcessor.from_pretrained(str(local_dir), use_fast=True, local_files_only=True)
+        self.model = AutoModel.from_pretrained(str(local_dir), local_files_only=True).to(self.device)
+
+    CameraSelector._load_model = _load_model  # type: ignore[method-assign]
+
+
 def _preview(save: Path, out: Path) -> None:
     """Top view: panorama cloud blue, aligned new points orange. Never fails the job."""
     try:
@@ -97,6 +114,7 @@ def main() -> int:
     root = Path(args.target_path)
     from src.retrieval_wm import PanoramaMemoryBank
 
+    _pin_dinov2()
     device = torch.device("cuda:0")
     sample = next((root / "render_results" / "pano_bank" / "images").glob("*.png"))
     import imagesize

@@ -51,4 +51,4 @@ Trains the Gaussian splat from that dataset.
 - **Export splat.ply** writes `outputs\<scene>\hyworld\splat.ply`. The default color space is **Unreal / VotionSplat Export**. The other choices are **3DGS / sRGB** and **Linear Rec.709**.
 - **Open result folder** opens `outputs\<scene>\hyworld\gs_result`.
 
-Screenshots: [app-01](media/screenshots/app-01.png), [app-02](media/screenshots/app-02.png), [app-03](media/screenshots/app-03.png).
+Screenshots: [Home](media/screenshots/app-home.png), [Panorama](media/screenshots/app-panorama.png), [Expand](media/screenshots/app-expand.png), [Splat](media/screenshots/app-splat.png).

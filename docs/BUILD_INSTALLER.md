@@ -25,7 +25,7 @@ Set `VOTIONSPLAT_NO_DEV_TOOLS=1`, clear `CUDA_PATH` and `CUDA_HOME`, drop CUDA T
 powershell -NoProfile -ExecutionPolicy Bypass -File tools\installer\build_installer.ps1
 ```
 
-That script rebuilds the icon, runs `tools\installer\stage.ps1`, then Inno Setup. The setup is `D:\VotionSplat_build\Output\VotionSplat-3.0.0-Setup.exe` plus the spanned `.bin` parts. Do not upload it to GitHub. Put the Output folder on the company share.
+That script rebuilds the icon, runs `tools\installer\stage.ps1`, then Inno Setup. The setup is `D:\VotionSplat_build\Output\VotionSplat-<version>-Setup.exe` plus the spanned `.bin` parts. Do not upload it to GitHub. Put the Output folder on the company share.
 
 Install once to `D:\VotionSplat_test` and read `install_check.log`. Every line should be PASS.
 

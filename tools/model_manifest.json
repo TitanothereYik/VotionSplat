@@ -255,6 +255,22 @@
       ]
     },
     {
+      "id": "wan_vae_config",
+      "label": "Wan VAE config",
+      "group": "core",
+      "stage": "Expand",
+      "kind": "snapshot",
+      "size_gb": 0.0,
+      "repo": "Wan-AI/Wan2.1-T2V-14B-Diffusers",
+      "revision": "38ec498cb3208fb688890f8cc7e94ede2cbd7f68",
+      "allow_patterns": [
+        "vae/config.json"
+      ],
+      "check_files": [
+        "vae/config.json"
+      ]
+    },
+    {
       "id": "umt5",
       "label": "UMT5",
       "group": "core",

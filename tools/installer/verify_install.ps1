@@ -6,9 +6,12 @@ $ErrorActionPreference = "Continue"
 $log = New-Object System.Collections.Generic.List[string]
 $env:PYTHONPATH = $AppDir
 $env:VOTIONSPLAT_NO_DEV_TOOLS = "1"
+# Each venv must run on the bundled Python. A build machine still has the original Python, so imports alone would pass.
+$env:VOTIONSPLAT_PY_HOME = Join-Path $AppDir "runtime\python312"
+$onBundled = "import os, sys; home = os.environ['VOTIONSPLAT_PY_HOME']; assert os.path.samefile(sys.base_prefix, home), sys.base_prefix; "
 
 function Add-Check([string]$Name, [string]$Exe, [string]$Code) {
-    & $Exe -c $Code
+    & $Exe -c ($onBundled + $Code)
     if ($LASTEXITCODE -eq 0) {
         $script:log.Add("PASS $Name")
     } else {

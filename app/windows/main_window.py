@@ -11,6 +11,7 @@ from PySide6.QtGui import (
     QCloseEvent,
     QColor,
     QFont,
+    QLinearGradient,
     QPainter,
     QPixmap,
     QTextBlockFormat,
@@ -74,8 +75,7 @@ Weight files land in models. Hub snapshots land in .hf_cache. SAM 3 is already i
 
 VotionSplat  3.0  Yik  MIT"""
 
-LOG_IDLE = """STATUS // idle
-Qt never imports torch. Dummy worker: 20 lines then exit. Stop kills the subprocess."""
+LOG_IDLE = "STATUS // idle"
 
 
 def _stops_the_job(text: str) -> bool:
@@ -301,27 +301,44 @@ class JobStrip(QWidget):
 
 
 class AppBanner(QWidget):
-    """Full-width wordmark at the top of the window. The art is 1920x250."""
+    """Wordmark strip at the top of the window. The art is 1920x250 and keeps a fixed height;
+    past the art's right edge the strip is black so a wide window does not grow the banner."""
+
+    HEIGHT = 150
+    FADE = 96
 
     def __init__(self, pixmap: QPixmap):
         super().__init__()
         self.setObjectName("appBanner")
-        self._pix = pixmap
+        self._src = pixmap
+        self._pix = QPixmap()
+        self._dpr = 0.0
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.fit(1180)
+        self.setFixedHeight(0 if pixmap.isNull() else self.HEIGHT)
 
-    def fit(self, width: int) -> None:
-        if self._pix.isNull() or self._pix.width() == 0 or width <= 0:
-            self.setFixedHeight(0)
-            return
-        self.setFixedHeight(max(1, round(width * self._pix.height() / self._pix.width())))
+    def _scaled(self) -> QPixmap:
+        dpr = self.devicePixelRatioF()
+        if self._pix.isNull() or dpr != self._dpr:
+            self._pix = self._src.scaledToHeight(
+                round(self.HEIGHT * dpr), Qt.TransformationMode.SmoothTransformation
+            )
+            self._pix.setDevicePixelRatio(dpr)
+            self._dpr = dpr
+        return self._pix
 
     def paintEvent(self, _event) -> None:
-        if self._pix.isNull() or self.width() <= 0 or self.height() <= 0:
+        if self._src.isNull() or self.width() <= 0:
             return
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
-        painter.drawPixmap(self.rect(), self._pix)
+        painter.fillRect(self.rect(), Qt.GlobalColor.black)
+        pix = self._scaled()
+        art_w = round(pix.width() / pix.devicePixelRatio())
+        painter.drawPixmap(0, 0, pix)
+        if self.width() > art_w:
+            fade = QLinearGradient(art_w - self.FADE, 0, art_w, 0)
+            fade.setColorAt(0.0, QColor(0, 0, 0, 0))
+            fade.setColorAt(1.0, QColor(0, 0, 0, 255))
+            painter.fillRect(art_w - self.FADE, 0, self.FADE, self.HEIGHT, fade)
         painter.end()
 
 
@@ -392,11 +409,6 @@ class MainWindow(QMainWindow):
         pixmap = QPixmap(str(path)) if path.is_file() else QPixmap()
         self._app_banner = AppBanner(pixmap)
         return self._app_banner
-
-    def resizeEvent(self, event) -> None:
-        super().resizeEvent(event)
-        if hasattr(self, "_app_banner"):
-            self._app_banner.fit(self.width())
 
     def _build_brand(self) -> QWidget:
         bar = QWidget()
@@ -498,8 +510,8 @@ class MainWindow(QMainWindow):
         r.addWidget(self._lab("Profile"))
         self.profile = QComboBox()
         self.profile.addItem("Quality")
-        self.profile.addItem("Fast (P4)")
-        self.profile.addItem("Scout (P4)")
+        self.profile.addItem("Fast")
+        self.profile.addItem("Scout")
         model = self.profile.model()
         model.item(1).setEnabled(False)
         model.item(2).setEnabled(False)

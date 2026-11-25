@@ -1,4 +1,4 @@
-# Stage the app and compile VotionSplat-3.0.0-Setup.
+# Stage the app and compile VotionSplat-<version>-Setup.
 $ErrorActionPreference = "Stop"
 Set-Location -LiteralPath "D:\Votion3DGS"
 & .venv\Scripts\python.exe tools\make_brand_assets.py

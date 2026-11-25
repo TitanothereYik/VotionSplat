@@ -20,6 +20,7 @@ Home reads `tools/model_manifest.json`. Sizes are the files on disk, in decimal 
 | WorldStereo config | Expand | 0.00 | core | hanshanxue/WorldStereo |
 | Wan 480P config | Expand | 0.00 | core | Wan-AI/Wan2.1-I2V-14B-480P-Diffusers |
 | Wan 720P configs | Expand | 0.02 | core | Wan-AI/Wan2.1-I2V-14B-720P-Diffusers |
+| Wan VAE config | Expand | 0.00 | core | Wan-AI/Wan2.1-T2V-14B-Diffusers |
 | UMT5 | Expand | 6.74 | core | Comfy-Org/Wan_2.1_ComfyUI_repackaged |
 | CLIP vision | Expand | 1.26 | core | Comfy-Org/Wan_2.1_ComfyUI_repackaged |
 | DINOv2 | Expand | 0.35 | core | facebook/dinov2-base |
