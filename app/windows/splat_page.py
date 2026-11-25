@@ -2,7 +2,7 @@
 
 Left rail: controller chips, max steps (any integer >= 1), Gaussian budget (editable),
 resolution scale, SH degree, hold-out eval, Train | Pause | Stop | Continue | Retrain,
-Export splat.ply | Export compact, export colour space (Unreal / VotionSplat Export, WallGS Pro, or Luma), Open COLMAP folder.
+Export splat.ply | Export compact, export colour space (VotionSplat, sRGB, or linear), Open COLMAP folder.
 Viewport: shared-memory frames with HUD (state, step / epoch, loss EMA, PSNR,
 Gaussians / budget, it/s, viewport fps, VRAM), loss / PSNR sparkline, training camera
 list (grouped by rail) with GT compare. Reset returns to the rails Star.
@@ -304,30 +304,9 @@ class SplatPage(QWidget):
             self.color_space.addItem(label, key)
         default = self.color_space.findData(D.COLOR_SPACE_DEFAULT)
         self.color_space.setCurrentIndex(default if default >= 0 else 0)
-        self.color_space.setToolTip(
-            D.VOTION_UE_SETUP + " "
-            "Unreal / WallGS Pro (default): every Gaussian, full SH, untagged so WallGS blends "
-            "in display space like the trainer. "
-            "Unreal / WallGS Pro, OCIO ACES view: the same untagged file, set up for Unreal's OCIO viewport "
-            f"with Source {D.OCIO_WALLGS_SOURCE} from docs/unreal/{D.OCIO_VOTION_CONFIG_NAME}, so "
-            f"{D.OCIO_VIEW} shows the trained colour. "
-            "Unreal / Luma: prunes faint Gaussians, fattens needles, padded past 1.9M so Luma imports every chunk "
-            "instead of only the central one, and keeps the 45 f_rest columns Luma 0.4.1 needs — place the _Baked blueprint, not _Dynamic. 3DGS / sRGB is the raw "
-            "trained file for Brush/Postshot. Linear Rec.709 is sRGB-to-linear for other engines, tagged so "
-            "WallGS reads it as Linear Rec.709 — not ACEScg."
-        )
+        self.color_space.setToolTip(D.VOTION_UE_SETUP)
         r.addWidget(self.color_space)
-        r.addWidget(
-            _hint(
-                D.VOTION_UE_SETUP
-                + " "
-                + D.WALLGS_UE_SETUP
-                + " "
-                + D.WALLGS_ACESCG_UE_SETUP
-                + " Unreal / Luma: drag into the Content Browser, place _Baked, scale 1. "
-                + D.LUMA_UE_SETUP
-            )
-        )
+        r.addWidget(_hint(D.VOTION_UE_SETUP))
 
         row3 = QHBoxLayout()
         self.btn_export = QPushButton("Export splat.ply")

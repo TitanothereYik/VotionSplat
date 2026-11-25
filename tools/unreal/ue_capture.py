@@ -15,7 +15,7 @@ from pathlib import Path
 
 import unreal
 
-JOB = Path(os.environ.get("VOTION_JOB") or r"D:\Votion3DGS\unreal\validation\jobs\current.json")
+JOB = Path(os.environ.get("VOTION_JOB") or str(Path(__file__).resolve().parents[2] / "unreal" / "validation" / "jobs" / "current.json"))
 STATE = {"phase": "start", "tick": 0, "camera": 0, "wait": 0, "task": None, "cameras": [], "job": {}}
 
 

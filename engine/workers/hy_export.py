@@ -6,11 +6,13 @@ import argparse
 import sys
 from pathlib import Path
 
+from engine.splat import defaults as D
+
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--scene", required=True)
-    parser.add_argument("--color-space", default="wallgs")
+    parser.add_argument("--color-space", default=D.COLOR_SPACE_DEFAULT)
     parser.add_argument("--no-soften", action="store_true",
                         help="keep the trained scales and opacities instead of baking the viewport's softness")
     parser.add_argument("--out", type=Path, default=None,
@@ -22,7 +24,6 @@ def main(argv: list[str] | None = None) -> int:
     from engine.hyworld.gs_export import load_training_cameras, similarity, soften_splats, to_ply_arrays
     from engine.hyworld.paths import gs_result, hy_root, latest_checkpoint
     from engine.job import job_progress
-    from engine.splat import defaults as D
     from engine.splat.ply_export import write_splat_ply
 
     ckpt = latest_checkpoint(args.scene)
@@ -72,9 +73,7 @@ def main(argv: list[str] | None = None) -> int:
     job_progress(100, 100, "done")
     print(f"SPLAT\tply\t{path}", flush=True)
     label = dict(D.COLOR_SPACE_CHOICES).get(space, space)
-    reads = D.WALLGS_READS.get(space)
-    print(f"STATUS // exported {count} gaussians to {path} as {label}"
-          + (f"; WallGS Source Color Space: {reads}" if reads else ""), flush=True)
+    print(f"STATUS // exported {count} gaussians to {path} as {label}", flush=True)
     return 0
 
 

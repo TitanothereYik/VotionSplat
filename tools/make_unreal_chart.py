@@ -28,7 +28,7 @@ COLS = 8
 PATCH = 0.4  # metres
 GAP = 0.1
 STEP = 0.02
-OUT = ROOT / "docs" / "unreal" / "Votion_WallGS_Chart.ply"
+OUT = ROOT / "docs" / "unreal" / "Votion_Plugin_Chart.ply"
 
 
 def patches() -> list[tuple[float, float, float]]:
@@ -63,18 +63,11 @@ def build() -> dict:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--votion", action="store_true",
-                        help="write the Votion plugin chart (untouched colour, gsplat antialiased tags)")
-    args = parser.parse_args()
-    if args.votion:
-        path, n = write_splat_ply(
-            ROOT / "docs" / "unreal" / "Votion_Plugin_Chart.ply", build(),
-            color_space=D.COLOR_SPACE_VOTION, votion_raster="gsplat_antialiased",
-            votion_near_plane=0.01, votion_sh_degree=0,
-        )
-    else:
-        path, n = write_splat_ply(OUT, build(), color_space=D.COLOR_SPACE_WALLGS)
+    path, n = write_splat_ply(
+        OUT, build(),
+        color_space=D.COLOR_SPACE_VOTION, votion_raster="gsplat_antialiased",
+        votion_near_plane=0.01, votion_sh_degree=0,
+    )
     print(f"wrote {path} ({n} Gaussians, {len(patches())} patches)")
     return 0
 

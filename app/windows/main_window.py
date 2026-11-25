@@ -53,6 +53,7 @@ from engine.job import (
     worldstereo_argv,
 )
 from engine.pano.defaults import HELP_PANORAMA
+from engine.splat import defaults as D
 from engine.pano.scene_io import scene_dir
 from engine.splat.status import litegs_spike_ok
 
@@ -1255,7 +1256,7 @@ class MainWindow(QMainWindow):
         kind = args[0] if args else ""
         scene = args[1] if len(args) > 1 else self.scene.text()
         if kind == "__hy_export__":
-            color_space = args[2] if len(args) > 2 else "wallgs"
+            color_space = args[2] if len(args) > 2 else D.COLOR_SPACE_DEFAULT
             soften = (args[3] if len(args) > 3 else "1") != "0"
             self._start_hy(export_argv(scene, color_space, soften), "hy_export")
         elif kind == "__hy_train__":

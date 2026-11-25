@@ -30,7 +30,7 @@ def main(argv: list[str] | None = None) -> int:
         "--color-space",
         default=D.COLOR_SPACE_DEFAULT,
         choices=list(D.COLOR_SPACES),
-        help="PLY export: wallgs (WallGS Pro, default), wallgs_acescg (WallGS Pro, linear ACEScg), luma, srgb, linear",
+        help="PLY export: votion (VotionSplat, default), srgb, linear",
     )
     args = parser.parse_args(argv)
 

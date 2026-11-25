@@ -135,8 +135,8 @@ def soften_splats(
     chunk: int = 16384,
     progress=None,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Bake a screen-space low-pass into each kept Gaussian for classic renderers (WallGS, Luma,
-    LiteGS: +0.3 px^2, full opacity). The reference view sits at the nearest training camera that
+    """Bake a screen-space low-pass into each kept Gaussian for classic renderers
+    (+0.3 px^2, full opacity). The reference view sits at the nearest training camera that
     frames the Gaussian (any camera in front if none does), with pinhole ``focal``. Returns
     (isotropic world variance to add, opacity factor): the variance widens the footprint there by
     ``extra_px2``, and the factor sqrt(det(S) / det(S + total_px2)) keeps the footprint's integral,

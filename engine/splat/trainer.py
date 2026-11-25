@@ -4,7 +4,7 @@ Modes (``engine.workers.splat --mode``):
   train / continue / retrain  step loop with Pause / Resume over stdin, live viewport
   view                        keep the checkpoint on GPU, re-render on camera change
   export / export_compact     write splat.ply (full SH) / splat_compact.ply
-                              ``--color-space wallgs|wallgs_acescg|luma|srgb|linear`` (default wallgs)
+                              ``--color-space votion|srgb|linear`` (default votion)
 
 Stdout protocol (tab separated, one line each; Qt parses ``SPLAT\\t...``)::
 
@@ -353,13 +353,9 @@ class SplatTrainer:
         )
         emit("ply", out)
         extra = ", compact" if compact else ", full SH"
-        if self.color_space == D.COLOR_SPACE_LUMA:
-            extra += ", Luma layout"
-        elif drop_sh_rest:
+        if drop_sh_rest:
             extra += ", DC only"
-        reads = D.WALLGS_READS.get(self.color_space)
-        status(f"exported {out} ({n} gaussians{extra}, color={self.color_space}"
-               + (f", WallGS Source Color Space: {reads}" if reads else "") + ")")
+        status(f"exported {out} ({n} gaussians{extra}, color={self.color_space})")
         return out
 
     # ------------------------------------------------------------------ modes

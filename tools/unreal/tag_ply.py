@@ -1,7 +1,7 @@
 """Insert Votion header tags into a PLY whose vertex data was not colour-baked.
 
 Refuses files that already carry postshot or votion comments. The header cannot prove
-which export preset produced the numbers, so only use this on wallgs or srgb exports
+which export preset produced the numbers, so only use this on srgb exports
 that were written without soften. HY scenes should be re-exported with the votion preset.
 """
 

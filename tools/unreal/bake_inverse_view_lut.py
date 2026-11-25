@@ -48,7 +48,7 @@ def _sample(lut: np.ndarray, display: np.ndarray) -> np.ndarray:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=Path, default=ROOT / "VS_OCIO.ocio")
+    parser.add_argument("--config", type=Path, default=ROOT / "docs" / "unreal" / "VS_OCIO.ocio")
     parser.add_argument("--display", default="sRGB - Display")
     parser.add_argument("--view", default="ACES 1.0 - SDR Video")
     parser.add_argument("--size", type=int, default=65)

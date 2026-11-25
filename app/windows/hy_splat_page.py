@@ -139,9 +139,7 @@ class HySplatPage(QWidget):
             self.color_space.addItem(label, key)
         default = self.color_space.findData(D.COLOR_SPACE_DEFAULT)
         self.color_space.setCurrentIndex(default if default >= 0 else 0)
-        self.color_space.setToolTip(
-            D.VOTION_UE_SETUP + "\n\n" + D.WALLGS_UE_SETUP + "\n\n" + D.WALLGS_ACESCG_UE_SETUP + "\n\n" + D.LUMA_UE_SETUP
-        )
+        self.color_space.setToolTip(D.VOTION_UE_SETUP)
         self.color_space.currentIndexChanged.connect(self._sync_soften)
         r.addWidget(self.color_space)
         self.soften = QCheckBox("Soften like the viewport (no needles)")

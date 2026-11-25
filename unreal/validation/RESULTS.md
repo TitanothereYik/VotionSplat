@@ -8,7 +8,7 @@
 | Build.bat / RunUAT.bat | present |
 | `.venv` | present, PyOpenColorIO 2.6.0 |
 | `.venvs\hyworld` | present, gsplat 1.5.3, CUDA available |
-| OCIO config | `D:\Votion3DGS\VS_OCIO.ocio` (Linear Rec.709 (sRGB), sRGB - Display, ACES 1.0 - SDR Video) |
+| OCIO config | `docs/unreal/VS_OCIO.ocio` (Linear Rec.709 (sRGB), sRGB - Display, ACES 1.0 - SDR Video) |
 | Scenes | `outputs\alpine_01\splat.ply`, `outputs\alpine_02\splat.ply`, `outputs\alpine_02\hyworld\splat.ply` |
 
 HY export uses `.venv\Scripts\python.exe` (`engine/hyworld/argv.py` `export_argv`). It was not run against `outputs/`, so the existing `splat.ply` files are unchanged.
