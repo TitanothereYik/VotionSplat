@@ -1,4 +1,4 @@
-"""3DGS PLY writer — Unreal MLSLabs / Luma, Postshot, Brush, SuperSplat.
+"""3DGS PLY writer — Unreal WallGS Pro / Luma, Postshot, Brush, SuperSplat.
 
 Input is the LiteGS unclustered layout from ``LiteGSBackend.unclustered_numpy()``:
 xyz ``[3,N]``, scale (log) ``[3,N]``, rot (wxyz, normalized) ``[4,N]``, sh_0 ``[1,3,N]``,
@@ -12,12 +12,24 @@ Colour spaces (``engine.splat.defaults.COLOR_SPACES``):
 * ``srgb`` — leave trained SH alone. Matches Brush / Postshot / SuperSplat / PlayCanvas
   (3DGS blends in gamma).
 * ``linear`` — sRGB EOTF on evaluated DC, rest scaled by the Jacobian. For engines that
-  treat splat RGB as linear albedo.
-* ``unreal`` (default) — MLSLabs CUDA 3DGS: trained sRGB full SH, prune
-  ``sigmoid(opacity) < UNREAL_MIN_OPACITY``, clamp scale anisotropy. No count cap.
-* ``luma`` — Luma AI Niagara: trained sRGB DC (plugin ignores ``f_rest``), same prune
-  and needle clamp, keep at most ``LUMA_MAX_GAUSSIANS`` so Luma uses one Niagara
-  system (above 1.9M it splits into 64 spatial chunks that do not depth-sort).
+  treat splat RGB as linear albedo. Tagged linear Rec.709 (WallGS reads "Linear Rec.709").
+* ``wallgs`` (default) — WallGS Pro: trained sRGB full SH, every Gaussian, untagged so
+  WallGS blends in display space like the trainer.
+* ``wallgs_acescg`` — WallGS Pro for an OCIO / ACES viewport: the same untagged file as
+  ``wallgs`` (a tagged ACEScg file blends in linear light and glitters). Unreal's OCIO Source
+  ``D.OCIO_WALLGS_SOURCE`` (tools/make_ocio_config.py) does the colour management.
+* ``luma`` — Luma AI Niagara 0.4.1. Its material decodes colour as
+  ``0.4 * pow(clamp(rgb), 2.2)`` and blends in linear light. DC is re-encoded so the
+  emission is proportional to the trained display colour (``rgb / LUMA_COLOR_MAX``);
+  Luma's linear blend then equals the trainer's display-space blend, and Unreal's
+  exposure plus ``LUMA_UE_LUT`` turn it back into display colour. Prune
+  ``sigmoid(opacity) < UNREAL_MIN_OPACITY``, clamp scale anisotropy, no count cap. Luma's DLL always cuts the splat into 64 spatial chunks; at or below
+  ``LUMA_SINGLE_CHUNK_MAX`` the importer builds one Niagara system from chunk 0 alone
+  (a central box) and silently drops the rest, so smaller files are padded with
+  invisible Gaussians to reach the 64-system path. The Niagara material only
+  shades DC, but the importer indexes a fixed degree-3 record, so the file
+  always carries 45 ``f_rest`` columns (zeros when the splat has no higher bands).
+  Without them the loader assigns every Gaussian scale 1 and a NaN rotation.
 
 Coordinates stay COLMAP/OpenCV; both UE plugins convert on import. Do not
 sRGB→linear bake.
@@ -36,6 +48,11 @@ import numpy as np
 from engine.splat import defaults as D
 
 SH_C0 = 0.28209479177387814
+LUMA_F_REST = 45  # degree-3 Inria width. Luma 0.4.1 reads scale and rotation past this.
+LUMA_GAMMA = 2.2  # Luma material: tc = pow(clamp(ToneColor, 0, 1), 2.2) * LUMA_EMISSION
+LUMA_MIN_COUNT = D.LUMA_SINGLE_CHUNK_MAX + 1
+LUMA_PAD_LOG_SCALE = -14.0  # sub-pixel sprite
+LUMA_PAD_OPACITY = -20.0  # alpha ~2e-9, zero in Luma's f16 colour texture
 
 
 def _sigmoid(x: np.ndarray) -> np.ndarray:
@@ -61,11 +78,6 @@ def flatten_sh_rest_inria(shr: np.ndarray) -> np.ndarray:
     return np.ascontiguousarray(shr.transpose(2, 1, 0).reshape(n, -1))
 
 
-def _linear_to_srgb(c: np.ndarray) -> np.ndarray:
-    c = np.clip(c, 0.0, None)
-    return np.where(c <= 0.0031308, 12.92 * c, 1.055 * np.power(c, 1.0 / 2.4) - 0.055)
-
-
 def clamp_log_anisotropy(log_scale: np.ndarray, max_ratio: float) -> np.ndarray:
     """Fatten degenerate needles: raise the small axes so max/min <= ``max_ratio``.
 
@@ -79,16 +91,24 @@ def clamp_log_anisotropy(log_scale: np.ndarray, max_ratio: float) -> np.ndarray:
     return np.log(np.maximum(s, floor).clip(1e-8, None)).astype(np.float32)
 
 
-def keep_highest_opacity(logit: np.ndarray, n_max: int) -> np.ndarray:
-    """Boolean mask keeping the ``n_max`` largest ``sigmoid(opacity)`` values."""
-    n = int(np.asarray(logit).shape[0])
-    n_max = int(n_max)
-    if n_max <= 0 or n <= n_max:
-        return np.ones(n, dtype=bool)
-    order = np.argpartition(_sigmoid(logit), n - n_max)
-    keep = np.zeros(n, dtype=bool)
-    keep[order[n - n_max :]] = True
-    return keep
+def _luma_pad(xyz, scale, rot, sh0, shr_flat, opa, target: int):
+    """Append invisible Gaussians up to ``target`` rows. They reuse real positions so the
+    chunk grid Luma derives from the bounds does not move."""
+    n = int(xyz.shape[0])
+    if n == 0 or n >= target:
+        return xyz, scale, rot, sh0, shr_flat, opa
+    src = np.arange(target - n) % n
+    pad = target - n
+    rot_pad = np.zeros((pad, 4), dtype=np.float32)
+    rot_pad[:, 0] = 1.0
+    return (
+        np.concatenate([xyz, xyz[src]]),
+        np.concatenate([scale, np.full((pad, 3), LUMA_PAD_LOG_SCALE, dtype=np.float32)]),
+        np.concatenate([rot, rot_pad]),
+        np.concatenate([sh0, np.zeros((pad, sh0.shape[1]), dtype=np.float32)]),
+        np.concatenate([shr_flat, np.zeros((pad, shr_flat.shape[1]), dtype=np.float32)]),
+        np.concatenate([opa, np.full(pad, LUMA_PAD_OPACITY, dtype=np.float32)]),
+    )
 
 
 def bake_sh_color(
@@ -97,12 +117,16 @@ def bake_sh_color(
     color_space: str,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Remap SH so evaluated RGB matches ``color_space``. ``sh0`` is ``[1,3,N]``,
-    ``shr`` is ``[K-1,3,N]``. Identity for ``srgb``, ``unreal``, and ``luma``."""
+    ``shr`` is ``[K-1,3,N]``. Identity for ``srgb``, ``wallgs`` and ``wallgs_acescg``."""
     space = D.color_space_from_key(color_space)
     sh0 = np.asarray(sh0, dtype=np.float32)
     shr = np.asarray(shr, dtype=np.float32)
-    if space in (D.COLOR_SPACE_SRGB, D.COLOR_SPACE_UNREAL, D.COLOR_SPACE_LUMA):
+    if space in (D.COLOR_SPACE_SRGB, D.COLOR_SPACE_WALLGS, D.COLOR_SPACE_WALLGS_ACESCG, D.COLOR_SPACE_VOTION):
         return sh0, shr
+    if space == D.COLOR_SPACE_LUMA:
+        rgb = np.asarray(sh0[0], dtype=np.float64) * SH_C0 + 0.5
+        enc = np.clip(rgb / D.LUMA_COLOR_MAX, 0.0, 1.0) ** (1.0 / LUMA_GAMMA)
+        return ((enc - 0.5) / SH_C0).astype(np.float32)[None, :, :], shr
 
     dc = np.asarray(sh0[0], dtype=np.float64)  # [3, N]
     rgb = dc * SH_C0 + 0.5  # 3DGS / LiteGS display-referred eval at DC
@@ -118,29 +142,15 @@ def bake_sh_color(
     return sh0_out, shr_out
 
 
-def unbake_linear_contrast_dc(
-    dc: np.ndarray,
-    shr_flat: np.ndarray,
-    contrast: float = D.MLSLABS_CONTRAST,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Invert the old Unreal sRGB→linear + contrast bake on PLY ``f_dc`` / ``f_rest``.
-
-    ``dc`` is ``[N,3]``, ``shr_flat`` is Inria channel-major ``[N, 3*(K-1)]``.
-    """
-    contrast = float(contrast) if float(contrast) > 1e-6 else 1.0
-    rgb_out = np.asarray(dc, dtype=np.float64) * SH_C0 + 0.5
-    lin = (np.clip(rgb_out, 0.0, 1.0) - 0.5) * contrast + 0.5
-    lin = np.maximum(lin, 0.0)
-    srgb = _linear_to_srgb(lin)
-    jac = _srgb_to_linear_grad(srgb) / contrast
-    dc_o = ((srgb - 0.5) / SH_C0).astype(np.float32)
-    if shr_flat.size == 0:
-        return dc_o, shr_flat
+def _luma_rest(shr_flat: np.ndarray) -> np.ndarray:
+    """Fit ``[N, *]`` rest coefficients to the 45 columns Luma's loader requires."""
     n, width = shr_flat.shape
-    bands = width // 3
-    shr = np.asarray(shr_flat, dtype=np.float32).reshape(n, 3, bands)
-    shr_o = shr / np.clip(jac.astype(np.float32)[:, :, None], 1e-6, None)
-    return dc_o, shr_o.reshape(n, width).astype(np.float32)
+    if width == LUMA_F_REST:
+        return shr_flat
+    out = np.zeros((n, LUMA_F_REST), dtype=np.float32)
+    if width:
+        out[:, : min(width, LUMA_F_REST)] = shr_flat[:, :LUMA_F_REST]
+    return out
 
 
 def write_splat_ply(
@@ -151,11 +161,23 @@ def write_splat_ply(
     drop_sh_rest: bool = False,
     min_opacity: float = 0.005,
     color_space: str = D.COLOR_SPACE_DEFAULT,
+    votion_raster: str | None = None,
+    votion_near_plane: float | None = None,
+    votion_sh_degree: int | None = None,
 ) -> tuple[Path, int]:
-    """Write ``path`` and return ``(path, gaussians_written)``."""
+    """Write ``path`` and return ``(path, gaussians_written)``, not counting Luma padding."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     space = D.color_space_from_key(color_space)
+    votion = space == D.COLOR_SPACE_VOTION
+    if votion:
+        if votion_raster not in D.VOTION_RASTERS:
+            raise ValueError(f"votion export needs votion_raster in {D.VOTION_RASTERS}, got {votion_raster!r}")
+        near = float("nan") if votion_near_plane is None else float(votion_near_plane)
+        if not np.isfinite(near) or near <= 0.0:
+            raise ValueError("votion export needs a finite votion_near_plane > 0")
+        compact = False
+        drop_sh_rest = False
 
     xyz = np.asarray(arrays["xyz"], dtype=np.float32).T  # [N,3]
     scale = np.asarray(arrays["scale"], dtype=np.float32).T  # [N,3]
@@ -165,9 +187,9 @@ def write_splat_ply(
     opa = np.asarray(arrays["opacity"], dtype=np.float32).reshape(-1)  # [N]
     n_total = int(xyz.shape[0])
     sh0, shr = bake_sh_color(sh0, shr, space)
-    ue = space in D.UE_ENGINE_SPACES
-    if space == D.COLOR_SPACE_LUMA:
-        drop_sh_rest = True  # Luma Niagara only stores DC RGB + opacity
+    luma = space == D.COLOR_SPACE_LUMA
+    if luma:
+        drop_sh_rest = False  # columns must exist even though Niagara shades DC only
 
     sh0 = np.ascontiguousarray(sh0.transpose(2, 1, 0).reshape(n_total, -1))  # [N,3]
     if drop_sh_rest or shr.size == 0:
@@ -175,12 +197,20 @@ def write_splat_ply(
     else:
         shr_flat = flatten_sh_rest_inria(shr)
 
+    votion_deg = 0
+    if votion:
+        k_minus_1 = int(shr_flat.shape[1] // 3)
+        deg_avail = int(round((k_minus_1 + 1) ** 0.5)) - 1
+        if (deg_avail + 1) ** 2 - 1 != k_minus_1 or deg_avail < 0:
+            raise ValueError(f"votion export has {shr_flat.shape[1]} f_rest columns, not 3*((d+1)^2-1)")
+        votion_deg = deg_avail if votion_sh_degree is None else min(int(votion_sh_degree), deg_avail)
+
     keep = np.ones(n_total, dtype=bool)
     finite = np.isfinite(xyz).all(axis=1) & np.isfinite(scale).all(axis=1) & np.isfinite(opa)
     keep &= finite
     opa_cut = float(min_opacity)
     prune_opa = compact
-    if ue:
+    if luma:
         opa_cut = max(opa_cut, float(D.UNREAL_MIN_OPACITY))
         prune_opa = True
     if prune_opa:
@@ -194,19 +224,11 @@ def write_splat_ply(
             shr_flat[keep],
             opa[keep],
         )
-    if space == D.COLOR_SPACE_LUMA:
-        cap = keep_highest_opacity(opa, D.LUMA_MAX_GAUSSIANS)
-        if not cap.all():
-            xyz, scale, rot, sh0, shr_flat, opa = (
-                xyz[cap],
-                scale[cap],
-                rot[cap],
-                sh0[cap],
-                shr_flat[cap],
-                opa[cap],
-            )
-    if ue:
+    n_real = int(xyz.shape[0])
+    if luma:
         scale = clamp_log_anisotropy(scale, D.UNREAL_MAX_ANISOTROPY)
+        shr_flat = _luma_rest(shr_flat)
+        xyz, scale, rot, sh0, shr_flat, opa = _luma_pad(xyz, scale, rot, sh0, shr_flat, opa, LUMA_MIN_COUNT)
     n = int(xyz.shape[0])
 
     norm = np.linalg.norm(rot, axis=1, keepdims=True)
@@ -229,7 +251,17 @@ def write_splat_ply(
     verts["scale_0"], verts["scale_1"], verts["scale_2"] = scale[:, 0], scale[:, 1], scale[:, 2]
     verts["rot_0"], verts["rot_1"], verts["rot_2"], verts["rot_3"] = rot[:, 0], rot[:, 1], rot[:, 2], rot[:, 3]
 
-    header = ["ply", "format binary_little_endian 1.0", f"element vertex {n}"]
+    if votion:
+        tags = (
+            f"comment votion.version={D.VOTION_TAG_VERSION}",
+            f"comment votion.raster={votion_raster}",
+            f"comment votion.near_plane={float(votion_near_plane)!r}",
+            f"comment votion.sh_degree={votion_deg}",
+        )
+    else:
+        tags = D.COLOR_SPACE_TAGS.get(space, ())
+    header = ["ply", "format binary_little_endian 1.0", *tags]
+    header.append(f"element vertex {n}")
     header += [f"property float {name}" for name in names]
     header.append("end_header")
     tmp = path.with_name(path.name + ".tmp")
@@ -237,7 +269,24 @@ def write_splat_ply(
         f.write(("\n".join(header) + "\n").encode("ascii"))
         f.write(verts.tobytes())
     tmp.replace(path)
-    return path, n
+    return path, n_real
+
+
+def _wallgs_source_space(lines: list[str]) -> str:
+    """WallGS Pro 1.1.4 ParsePlyColorSpace (GaussianSplatLibrary.cpp), for the self-test."""
+    prim = next((ln.split("=", 1)[1].strip() for ln in lines
+                 if ln.startswith("comment postshot.color.primaries=")), "")
+    eotf = next((ln.split("=", 1)[1].strip() for ln in lines if ln.startswith("comment postshot.color.eotf=")), "")
+    if not prim and not eotf:
+        return "Legacy Appearance (untagged)"
+    rec709 = prim.lower() in ("srgb", "rec709", "rec.709")
+    if prim.lower() == "acescg" and eotf.lower() == "linear":
+        return "ACEScg (linear)"
+    if rec709 and eotf.lower() == "linear":
+        return "Linear Rec.709"
+    if rec709 and eotf.lower() == "srgb":
+        return "sRGB (encoded)"
+    return "import error"
 
 
 def read_ply_header(path: Path) -> dict:
@@ -296,20 +345,6 @@ def load_splat_ply_arrays(path: Path) -> dict:
     return {"xyz": xyz, "scale": scale, "rot": rot, "sh_0": sh0, "sh_rest": shr, "opacity": opa}
 
 
-def repair_baked_unreal_ply(path: Path) -> tuple[Path, int]:
-    """Undo the old linear+contrast SH bake, then rewrite with current Unreal hygiene."""
-    arrays = load_splat_ply_arrays(path)
-    n = int(arrays["sh_0"].shape[-1])
-    dc = arrays["sh_0"][0].T.copy()
-    shr_flat = flatten_sh_rest_inria(arrays["sh_rest"])
-    dc, shr_flat = unbake_linear_contrast_dc(dc, shr_flat)
-    arrays["sh_0"] = dc.T[None, :, :].astype(np.float32)
-    if shr_flat.size:
-        bands = shr_flat.shape[1] // 3
-        arrays["sh_rest"] = shr_flat.reshape(n, 3, bands).transpose(2, 1, 0).astype(np.float32)
-    return write_splat_ply(path, arrays, color_space=D.COLOR_SPACE_UNREAL)
-
-
 def _self_test() -> None:
     # Inria channel-major: [K-1, 3, N] → R0,R1,... G0,G1,... B0,B1,...
     shr = np.zeros((2, 3, 1), dtype=np.float32)
@@ -326,22 +361,27 @@ def _self_test() -> None:
     shr0 = np.ones((2, 3, 4), dtype=np.float32) * 0.01
     a, b = bake_sh_color(sh0, shr0, "srgb")
     assert np.allclose(a, sh0) and np.allclose(b, shr0)
-    ua, ub = bake_sh_color(sh0, shr0, "unreal")
-    assert np.allclose(ua, sh0) and np.allclose(ub, shr0)
+    wa, wb = bake_sh_color(sh0, shr0, "wallgs")
+    assert np.allclose(wa, sh0) and np.allclose(wb, shr0)
+    assert D.color_space_from_key("unreal") == D.COLOR_SPACE_WALLGS
     la, lb = bake_sh_color(sh0, shr0, "luma")
-    assert np.allclose(la, sh0) and np.allclose(lb, shr0)
+    emission = D.LUMA_EMISSION * np.clip(la[0, :, 0] * SH_C0 + 0.5, 0, 1) ** LUMA_GAMMA
+    scene = emission * 2.0 ** D.LUMA_UE_EXPOSURE
+    assert np.allclose(scene, np.array([0.2, 0.5, 0.8]), atol=3e-3) and np.allclose(lb, shr0)
     # Linear bake of mid-grey DC (sRGB 0.5 → linear ~0.214) packs back darker SH
     sh_mid = np.zeros((1, 3, 1), dtype=np.float32)  # rgb = 0.5
     out, _ = bake_sh_color(sh_mid, np.zeros((0, 3, 1), dtype=np.float32), "linear")
     rgb_lin = float(out[0, 0, 0] * SH_C0 + 0.5)
     assert 0.20 < rgb_lin < 0.23, rgb_lin
+    # OCIO ACES view preset: trained colour untouched (WallGS must blend it in display space)
+    assert D.color_space_from_key("acescg") == D.COLOR_SPACE_WALLGS_ACESCG
+    ashr = np.full((3, 3, 3), 0.02, dtype=np.float32)
+    aa, ab = bake_sh_color(sh0, ashr, "wallgs_acescg")
+    assert np.array_equal(aa, sh0) and np.array_equal(ab, ashr)
     needle = np.log(np.array([[1.0, 1e-6, 1e-6]], dtype=np.float64))
     fat = clamp_log_anisotropy(needle, 64.0)
     ratio = float(np.exp(fat).max() / np.exp(fat).min())
     assert abs(ratio - 64.0) < 0.1, ratio
-    cap = keep_highest_opacity(np.array([-2.0, 0.0, 2.0, 4.0, -1.0], dtype=np.float32), 3)
-    assert cap.sum() == 3 and bool(cap[1] and cap[2] and cap[3])
-
     n = 4
     arrays = {
         "xyz": np.zeros((3, n), dtype=np.float32),
@@ -357,21 +397,82 @@ def _self_test() -> None:
     import tempfile
 
     with tempfile.TemporaryDirectory() as td:
-        mls = Path(td) / "mls.ply"
-        out, written = write_splat_ply(mls, arrays, color_space="unreal")
-        assert written == n - 1  # faint Gaussian dropped
+        wall = Path(td) / "wallgs.ply"
+        out, written = write_splat_ply(wall, arrays, color_space="wallgs")
+        assert written == n  # every Gaussian kept
         info = read_ply_header(out)
-        assert info["vertices"] == n - 1 and info["f_rest"] == 45
+        assert info["vertices"] == n and info["f_rest"] == 45
+        head = out.read_bytes()[:2048].decode("ascii", errors="replace").splitlines()
+        assert not any(h.startswith("comment ") for h in head)  # tags would switch WallGS to linear blend
         loaded = load_splat_ply_arrays(out)
         rgb_keep = loaded["sh_0"][0, :, 0] * SH_C0 + 0.5
         assert np.allclose(rgb_keep, np.array([0.2, 0.5, 0.8]), atol=1e-5)
-        sc = np.exp(loaded["scale"][:, 0])
-        assert float(sc.max() / max(float(sc.min()), 1e-8)) <= 64.1
-        luma = Path(td) / "luma.ply"
-        out_l, written_l = write_splat_ply(luma, arrays, color_space="luma")
-        assert written_l == n - 1
-        info_l = read_ply_header(out_l)
-        assert info_l["vertices"] == n - 1 and info_l["f_rest"] == 0
+        assert np.allclose(loaded["scale"], arrays["scale"])  # no needle clamp
+        out_a, written_a = write_splat_ply(Path(td) / "acescg.ply", arrays, color_space="wallgs_acescg")
+        assert written_a == n and out_a.read_bytes() == out.read_bytes()  # same file as wallgs
+        for space, reads in D.WALLGS_READS.items():
+            out_s, _ = write_splat_ply(Path(td) / f"{space}.ply", arrays, color_space=space)
+            lines = out_s.read_bytes()[:2048].decode("ascii", errors="replace").splitlines()
+            assert _wallgs_source_space(lines) == reads, (space, reads)
+        global LUMA_MIN_COUNT
+        saved_min = LUMA_MIN_COUNT
+        LUMA_MIN_COUNT = 8
+        try:
+            luma = Path(td) / "luma.ply"
+            out_l, written_l = write_splat_ply(luma, arrays, color_space="luma")
+            assert written_l == n - 1  # faint Gaussian dropped
+            info_l = read_ply_header(out_l)
+            assert info_l["vertices"] == 8 and info_l["f_rest"] == LUMA_F_REST
+            padded = load_splat_ply_arrays(out_l)
+            sc = np.exp(padded["scale"][:, : n - 1])
+            assert float((sc.max(axis=0) / sc.min(axis=0)).max()) <= 64.1
+            assert np.allclose(padded["xyz"][:, n - 1 :], padded["xyz"][:, : 8 - (n - 1)])
+            assert float(_sigmoid(padded["opacity"][0, n - 1 :]).max()) < 1e-8
+            bare = dict(arrays)
+            bare["sh_rest"] = np.zeros((0, 3, n), dtype=np.float32)
+            out_b, _ = write_splat_ply(Path(td) / "luma_dc.ply", bare, color_space="luma")
+            assert read_ply_header(out_b)["f_rest"] == LUMA_F_REST
+        finally:
+            LUMA_MIN_COUNT = saved_min
+        rng = np.random.default_rng(0)
+        vn = 1000
+        v_rot = rng.standard_normal((4, vn)).astype(np.float32)
+        v_rot /= np.clip(np.linalg.norm(v_rot, axis=0, keepdims=True), 1e-8, None)
+        v_arrays = {
+            "xyz": rng.standard_normal((3, vn)).astype(np.float32),
+            "scale": (rng.standard_normal((3, vn)) * 0.1).astype(np.float32),
+            "rot": v_rot,
+            "sh_0": (rng.standard_normal((1, 3, vn)) * 0.1).astype(np.float32),
+            "sh_rest": (rng.standard_normal((15, 3, vn)) * 0.05).astype(np.float32),
+            "opacity": rng.standard_normal((1, vn)).astype(np.float32),
+        }
+        vpath, vwritten = write_splat_ply(
+            Path(td) / "votion.ply", v_arrays, color_space="votion",
+            votion_raster="gsplat_antialiased", votion_near_plane=0.01, votion_sh_degree=3,
+        )
+        assert vwritten == vn
+        vlines = vpath.read_bytes().split(b"end_header")[0].decode("ascii").splitlines()
+        assert vlines[:6] == [
+            "ply", "format binary_little_endian 1.0",
+            "comment votion.version=1",
+            "comment votion.raster=gsplat_antialiased",
+            "comment votion.near_plane=0.01",
+            "comment votion.sh_degree=3",
+        ]
+        loaded_v = load_splat_ply_arrays(vpath)
+        assert np.array_equal(loaded_v["xyz"], v_arrays["xyz"])
+        assert np.array_equal(loaded_v["scale"], v_arrays["scale"])
+        assert np.array_equal(loaded_v["opacity"], v_arrays["opacity"])
+        assert np.array_equal(loaded_v["sh_0"], v_arrays["sh_0"])
+        assert np.array_equal(loaded_v["sh_rest"], v_arrays["sh_rest"])
+        assert np.allclose(loaded_v["rot"], v_arrays["rot"], atol=1e-6)
+        try:
+            write_splat_ply(Path(td) / "bad.ply", v_arrays, color_space="votion")
+            raise AssertionError("missing votion_raster should raise")
+        except ValueError:
+            pass
+        va, vb = bake_sh_color(v_arrays["sh_0"], v_arrays["sh_rest"], "votion")
+        assert np.array_equal(va, v_arrays["sh_0"]) and np.array_equal(vb, v_arrays["sh_rest"])
     print("ply_export self-test OK")
 
 

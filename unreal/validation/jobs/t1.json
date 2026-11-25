@@ -1,0 +1,13 @@
+{
+  "ply": "D:\\Votion3DGS\\unreal\\test_assets\\T1_center.ply",
+  "cameras": "D:\\Votion3DGS\\unreal\\validation\\jobs\\tests_cams.json",
+  "asset_dir": "/Game/Validation",
+  "out_dir": "D:\\Votion3DGS\\unreal\\validation\\captures\\T1_center",
+  "settle_seconds": 15,
+  "quit": true,
+  "console": [
+    "r.VotionSplat.Enable 1",
+    "r.VotionSplat.LogViews 1",
+    "r.DefaultFeature.AutoExposure 0"
+  ]
+}

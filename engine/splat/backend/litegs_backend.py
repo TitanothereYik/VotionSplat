@@ -776,6 +776,9 @@ class LiteGSBackend:
             drop_sh_rest=drop_sh_rest,
             min_opacity=min_opacity,
             color_space=color_space,
+            votion_raster="litegs_classic",
+            votion_near_plane=D.LITEGS_NEAR_PLANE,
+            votion_sh_degree=int(self.sh_degree),
         )
 
     def vram_mb(self) -> int:

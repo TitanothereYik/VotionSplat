@@ -13,9 +13,12 @@ def stage_argv(stage: str, args: list[str], head: list[str] | None = None) -> li
     return [str(_PY), str(_RUN), "--stage", stage, *(head or []), "--", *args]
 
 
-def export_argv(scene: str, color_space: str) -> list[str]:
-    return [str(REPO_ROOT / ".venv" / "Scripts" / "python.exe"), "-m", "engine.workers.hy_export",
+def export_argv(scene: str, color_space: str, soften: bool = True) -> list[str]:
+    argv = [str(REPO_ROOT / ".venv" / "Scripts" / "python.exe"), "-m", "engine.workers.hy_export",
             "--scene", scene, "--color-space", color_space]
+    if not soften:
+        argv.append("--no-soften")
+    return argv
 
 
 EXPAND_LEVELS = ("auto", "card", "blocks", "states", "controlnet")
@@ -44,7 +47,13 @@ def hires_argv(
 
 
 def train_loop_argv(
-    scene: str, *, cont: bool = False, steps: int = 8000, mesh: bool = False, difix: bool = False
+    scene: str,
+    *,
+    cont: bool = False,
+    steps: int = 8000,
+    mesh: bool = False,
+    difix: bool = False,
+    frames: str = "expand",
 ) -> list[str]:
     argv = [str(REPO_ROOT / ".venv" / "Scripts" / "python.exe"), "-m", "engine.workers.hy_train_loop", "--scene", scene]
     if cont:
@@ -55,6 +64,8 @@ def train_loop_argv(
             argv.append("--mesh")
         if difix:
             argv.append("--difix")
+        if frames != "expand":
+            argv.extend(["--frames", frames])
     return argv
 
 

@@ -1,0 +1,14 @@
+{
+  "name": "chart",
+  "ply": "D:\\Votion3DGS\\docs\\unreal\\Votion_Plugin_Chart.ply",
+  "cameras": "D:\\Votion3DGS\\unreal\\validation\\jobs\\chart_cams.json",
+  "asset_dir": "/Game/Validation",
+  "out_dir": "D:\\Votion3DGS\\unreal\\validation\\captures\\chart",
+  "settle_seconds": 4,
+  "quit": true,
+  "console": [
+    "r.VotionSplat.Enable 1",
+    "r.VotionSplat.LogViews 1",
+    "r.DefaultFeature.AutoExposure 0"
+  ]
+}

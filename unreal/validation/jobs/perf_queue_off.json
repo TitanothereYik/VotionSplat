@@ -1,0 +1,19 @@
+{
+  "asset_dir": "/Game/Validation",
+  "out_root": "D:\\Votion3DGS\\unreal\\validation\\captures",
+  "settle_seconds": 5,
+  "perf_seconds": 8,
+  "quit": true,
+  "console": [
+    "r.VotionSplat.Enable 0",
+    "r.VotionSplat.Stats 1",
+    "r.VotionSplat.LogViews 1",
+    "r.VSync 0",
+    "t.MaxFPS 0",
+    "r.ProfileGPU.ShowUI 0",
+    "r.RDG.Events 1"
+  ],
+  "queue": [
+    {"name": "perf_off_alpine_02", "ply": "D:\\Votion3DGS\\unreal\\validation\\scenes\\alpine_02_votion.ply", "cameras": "D:\\Votion3DGS\\unreal\\validation\\jobs\\reuse_cams.json"}
+  ]
+}

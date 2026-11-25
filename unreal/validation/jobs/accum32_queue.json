@@ -1,0 +1,20 @@
+{
+  "asset_dir": "/Game/Validation",
+  "out_root": "D:\\Votion3DGS\\unreal\\validation\\captures",
+  "settle_seconds": 8,
+  "quit": true,
+  "console": [
+    "r.VotionSplat.Enable 1",
+    "r.VotionSplat.AccumFormat 1",
+    "r.VotionSplat.LogViews 1",
+    "r.DefaultFeature.AutoExposure 0"
+  ],
+  "queue": [
+    {
+      "name": "alpine_01_f32",
+      "ply": "D:\\Votion3DGS\\unreal\\validation\\scenes\\alpine_01_litegs.ply",
+      "cameras": "D:\\Votion3DGS\\unreal\\validation\\jobs\\alpine_01_cams.json",
+      "profile": "litegs"
+    }
+  ]
+}

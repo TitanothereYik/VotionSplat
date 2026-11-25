@@ -1,0 +1,24 @@
+{
+  "asset_dir": "/Game/Validation",
+  "out_root": "D:\\Votion3DGS\\unreal\\validation\\captures",
+  "settle_seconds": 3,
+  "quit": true,
+  "console": [
+    "r.VotionSplat.Enable 1",
+    "r.VotionSplat.SortReuse 1",
+    "r.VotionSplat.LogViews 1",
+    "r.DefaultFeature.AutoExposure 0"
+  ],
+  "queue": [
+    {
+      "name": "T1_reuse",
+      "ply": "D:\\Votion3DGS\\unreal\\test_assets\\T1_center.ply",
+      "cameras": "D:\\Votion3DGS\\unreal\\validation\\jobs\\tests_cams.json"
+    },
+    {
+      "name": "alpine_02_reuse",
+      "ply": "D:\\Votion3DGS\\unreal\\validation\\scenes\\alpine_02_votion.ply",
+      "cameras": "D:\\Votion3DGS\\unreal\\validation\\jobs\\reuse_cams.json"
+    }
+  ]
+}

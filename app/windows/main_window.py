@@ -298,6 +298,7 @@ class MainWindow(QMainWindow):
         self._splat_view_buf = ""
         self._want_splat_view = False
         self._splat_view_stopping = False
+        self._splat_view_bad: tuple[str, int] | None = None
         self._expect_kill = False
         self._out_buf = ""
         self._stat_cells: dict[str, StatCell] = {}
@@ -1103,7 +1104,8 @@ class MainWindow(QMainWindow):
         if not self._want_splat_view or self._job_running() or self._splat_view_running():
             return
         scene = self.scene.text()
-        if latest_checkpoint(scene) is None:
+        ckpt = latest_checkpoint(scene)
+        if ckpt is None or self._ckpt_key(ckpt) == self._splat_view_bad:
             return
         argv = stage_argv("view_ckpt", ["--result_dir", str(gs_result(scene)).replace("\\", "/")])
         proc = QProcess(self)
@@ -1140,12 +1142,24 @@ class MainWindow(QMainWindow):
             elif raw.startswith("STATUS //") or "Error" in raw or raw.startswith("Traceback"):
                 self._append_log(raw)
 
-    def _on_splat_view_finished(self, _code: int, _status: QProcess.ExitStatus) -> None:
+    @staticmethod
+    def _ckpt_key(path: Path) -> tuple[str, int]:
+        try:
+            return str(path), path.stat().st_mtime_ns
+        except OSError:
+            return str(path), 0
+
+    def _on_splat_view_finished(self, code: int, status: QProcess.ExitStatus) -> None:
         self._splat_view_proc = None
         self._splat_view_buf = ""
         if hasattr(self, "splat_page"):
             self.splat_page.on_worker_finished()
         if self._splat_view_stopping:
+            return
+        if code != 0 or status == QProcess.ExitStatus.CrashExit:
+            ckpt = latest_checkpoint(self.scene.text())
+            self._splat_view_bad = self._ckpt_key(ckpt) if ckpt is not None else None
+            self._append_log(f"STATUS // viewer exited {code}; it retries when a new checkpoint is saved")
             return
         if self._want_splat_view and not self._job_running():
             QTimer.singleShot(500, self._ensure_splat_view)
@@ -1241,7 +1255,9 @@ class MainWindow(QMainWindow):
         kind = args[0] if args else ""
         scene = args[1] if len(args) > 1 else self.scene.text()
         if kind == "__hy_export__":
-            self._start_hy(export_argv(scene, args[2] if len(args) > 2 else "unreal"), "hy_export")
+            color_space = args[2] if len(args) > 2 else "wallgs"
+            soften = (args[3] if len(args) > 3 else "1") != "0"
+            self._start_hy(export_argv(scene, color_space, soften), "hy_export")
         elif kind == "__hy_train__":
             self._on_hy_train(args)
         elif kind == "__hy_train_continue__":
@@ -1263,7 +1279,8 @@ class MainWindow(QMainWindow):
             count = 8000
         mesh = len(args) > 3 and args[3] == "1"
         difix = len(args) > 4 and args[4] == "1"
-        self._start_hy(train_loop_argv(scene, steps=count, mesh=mesh, difix=difix), "hy_train")
+        frames = args[5] if len(args) > 5 and args[5] else "expand"
+        self._start_hy(train_loop_argv(scene, steps=count, mesh=mesh, difix=difix, frames=frames), "hy_train")
 
     def _show_stage(self, name: str) -> None:
         if name not in STAGES:

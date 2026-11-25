@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import shutil
 import time
@@ -15,14 +16,15 @@ from engine.job import REPO_ROOT
 DIFIX_PY = REPO_ROOT / ".venvs" / "difix" / "Scripts" / "python.exe"
 DIFIX_SRC = REPO_ROOT / "vendor" / "difix3d" / "src"
 DIFIX_MODEL = "nvidia/difix_ref"
-DIFIX_FRACTIONS = (0.2, 0.3, 0.4, 0.55, 0.7)  # densification stops at 0.5
+DIFIX_EVERY = 2000
 DIFIX_VIEWS = 48
 DIFIX_LAMBDA = 0.3  # loss weight of fixed views (paper value)
+DIFIX_MAX_SIDE = 1024  # HiRes datasets: novel views shrink by a whole factor to stay near Difix's training size
 AUTOSAVE_SEC = 600
 NOVEL_PREFIX = "zdifix_"  # sorts after every real view, so holdout indices stay put
 
 
-def trainer_flags(data_dir: str, result_dir: str, steps: int, mesh: bool) -> list[str]:
+def trainer_flags(data_dir: str, result_dir: str, steps: int, mesh: bool, patch: int = 0) -> list[str]:
     """The world_gs_trainer argv that Train used to build inline."""
     count = int(steps)
     flags = [
@@ -55,13 +57,15 @@ def trainer_flags(data_dir: str, result_dir: str, steps: int, mesh: bool) -> lis
     ]
     if mesh:
         flags.append("--export_mesh")
+    if patch:
+        flags += ["--patch-size", str(int(patch))]
     return flags
 
 
-def fix_steps(max_steps: int) -> list[int]:
-    """Steps where a Difix round runs. Each value is strictly before the last step."""
-    steps = {max(1, int(max_steps * fraction)) for fraction in DIFIX_FRACTIONS}
-    return sorted(step for step in steps if step < max_steps - 1)
+def fix_steps(max_steps: int, every: int = DIFIX_EVERY) -> list[int]:
+    """Steps where a Difix round runs: every ``every`` steps, strictly before the last step."""
+    every = max(1, int(every))
+    return list(range(every, int(max_steps) - 1, every))
 
 
 def data_stamp(gs_data_dir: str | Path) -> dict:
@@ -81,6 +85,9 @@ def new_run(
     difix: bool,
     views: int,
     data_dir: str | Path,
+    every: int = DIFIX_EVERY,
+    frames: str = "expand",
+    patch: int = 0,
 ) -> dict:
     result_dir = Path(result_dir)
     result_dir.mkdir(parents=True, exist_ok=True)
@@ -90,7 +97,9 @@ def new_run(
         "mesh": bool(mesh),
         "difix": bool(difix),
         "views": int(views),
-        "fix_steps": fix_steps(int(steps)) if difix else [],
+        "frames": str(frames),
+        "patch": int(patch),
+        "fix_steps": fix_steps(int(steps), every) if difix else [],
         "base_data_dir": str(Path(data_dir)),
         "data_stamp": data_stamp(data_dir),
         "created": time.strftime("%Y-%m-%dT%H:%M:%S"),
@@ -151,7 +160,10 @@ def _read_json(path: Path) -> dict | None:
 
 def continue_info(result_dir: str | Path) -> dict:
     """Whether Continue can pick up this result dir, and from which step."""
-    empty = {"ok": False, "reason": "No run to continue.", "next_step": 0, "max_steps": 0, "difix": False}
+    empty = {
+        "ok": False, "reason": "No run to continue.", "next_step": 0, "max_steps": 0,
+        "difix": False, "frames": "expand",
+    }
     run = read_run(result_dir)
     if run is None:
         return empty
@@ -161,6 +173,7 @@ def continue_info(result_dir: str | Path) -> dict:
         "next_step": 0,
         "max_steps": int(run.get("max_steps") or 0),
         "difix": bool(run.get("difix")),
+        "frames": str(run.get("frames") or "expand"),
     }
     state = _read_json(state_json(result_dir)) or {}
     if state.get("reason") == "done":
@@ -183,7 +196,8 @@ def continue_info(result_dir: str | Path) -> dict:
 
 
 def _png_size(path: Path) -> tuple[int, int]:
-    data = Path(path).read_bytes()[:24]
+    with open(path, "rb") as handle:
+        data = handle.read(24)
     if data[:8] != b"\x89PNG\r\n\x1a\n" or data[12:16] != b"IHDR":
         raise ValueError(f"not a png: {path}")
     return int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
@@ -287,6 +301,10 @@ def novel_poses(
         c2w[:3, :3] = R
         c2w[:3, 3] = centre
         width, height = _png_size(image_dir / f"{name_a}.png")
+        factor = max(1, math.ceil(max(width, height) / DIFIX_MAX_SIDE))
+        if factor > 1:
+            width, height = width // factor, height // factor
+            K = [[float(v) / factor for v in K[0]], [float(v) / factor for v in K[1]], list(K[2])]
         made.append(
             {
                 "name": f"{NOVEL_PREFIX}r{int(round_k):02d}_{len(made):04d}",

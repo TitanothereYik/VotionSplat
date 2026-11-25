@@ -76,8 +76,11 @@ def check_flags() -> None:
     ]
     check(got == want, f"flags {got}")
     check(trainer_flags("a", "b", 100, True)[-1] == "--export_mesh", "mesh flag")
-    check(fix_steps(8000) == [1600, 2400, 3200, 4400, 5600], str(fix_steps(8000)))
-    check(fix_steps(300) == [60, 90, 120, 165, 210], str(fix_steps(300)))
+    check(trainer_flags("a", "b", 100, False, patch=1280)[-2:] == ["--patch-size", "1280"], "patch flag")
+    check(fix_steps(8000) == [2000, 4000, 6000], str(fix_steps(8000)))
+    check(fix_steps(10000) == [2000, 4000, 6000, 8000], str(fix_steps(10000)))
+    check(fix_steps(2001) == [], str(fix_steps(2001)))
+    check(fix_steps(300, 60) == [60, 120, 180, 240], str(fix_steps(300, 60)))
 
 
 def check_poses_and_merge() -> None:

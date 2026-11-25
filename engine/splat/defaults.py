@@ -5,6 +5,9 @@ Torch-free: Qt imports this module.
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 STRATEGY_LITEGS = "LiteGS"
 STRATEGY_MCMC_COMPACT = "MCMC Compact"
 STRATEGIES = (STRATEGY_LITEGS, STRATEGY_MCMC_COMPACT)
@@ -116,21 +119,39 @@ COMPACT_MIN_OPACITY = 0.005
 
 # PLY export colour. Training stays sRGB (LiteGS / 3DGS). Coordinates stay COLMAP/OpenCV;
 # Unreal plugins convert on import. Do not sRGB→linear bake SH for either UE preset.
-# Unreal / MLSLabs: CUDA 3DGS raster, full SH, prune faint, clamp needles, no count cap.
-# Unreal / Luma: Niagara; DC only (plugin ignores f_rest); cap at LUMA_MAX_GAUSSIANS so
-# Luma uses one system — above that it splits into 64 chunks that do not depth-sort.
-COLOR_SPACE_UNREAL = "unreal"
+# Unreal / WallGS Pro: trained sRGB full SH, every Gaussian, no Postshot colour tags. WallGS blends
+# tagged files in linear light, which breaks the sRGB-space blend the model was trained with (hidden
+# chromatic Gaussians show as blotches); untagged "Legacy Appearance" files blend in display space,
+# then WallGS applies an inverse film curve that WALLGS_UE_LUT undoes (tools/make_unreal_luts.py).
+# Unreal / Luma: Niagara. The material shades DC as 0.4 * pow(rgb, 2.2) and blends in linear light;
+# export re-encodes DC so emission is display colour / LUMA_COLOR_MAX, which makes the linear blend
+# equal the trainer's display blend. LUMA_UE_EXPOSURE scales it back and LUMA_UE_LUT displays it.
+# Plugin 0.4.1 reads a fixed degree-3 record, so the file always has 45 f_rest columns. No count cap:
+# at or below LUMA_SINGLE_CHUNK_MAX its importer keeps only the central spatial chunk of 64, so smaller
+# files are padded with invisible Gaussians to stay on the 64-chunk path.
+# Unreal / WallGS Pro, OCIO ACES view: the same untagged file as Unreal / WallGS Pro, so WallGS blends in
+# display space like the trainer. Tagged ACEScg files blend in linear light, which shows a display-trained
+# model's hidden colours as glitter. Colour management happens in Unreal's OCIO instead: Source is
+# OCIO_WALLGS_SOURCE from docs/unreal/OCIO_VOTION_CONFIG_NAME (tools/make_ocio_config.py), which undoes
+# WallGS's legacy film curve and the OCIO_DISPLAY / OCIO_VIEW of ocio_config(), so that view shows the
+# trained colour and the frame holds scene-referred ACES for every other view.
+COLOR_SPACE_WALLGS = "wallgs"
+COLOR_SPACE_WALLGS_ACESCG = "wallgs_acescg"
 COLOR_SPACE_LUMA = "luma"
 COLOR_SPACE_SRGB = "srgb"
 COLOR_SPACE_LINEAR = "linear"
-COLOR_SPACES = (COLOR_SPACE_UNREAL, COLOR_SPACE_LUMA, COLOR_SPACE_SRGB, COLOR_SPACE_LINEAR)
-UE_ENGINE_SPACES = (COLOR_SPACE_UNREAL, COLOR_SPACE_LUMA)
-COLOR_SPACE_DEFAULT = COLOR_SPACE_UNREAL
+COLOR_SPACE_VOTION = "votion"
+COLOR_SPACES = (COLOR_SPACE_WALLGS, COLOR_SPACE_WALLGS_ACESCG, COLOR_SPACE_LUMA, COLOR_SPACE_SRGB,
+                COLOR_SPACE_LINEAR, COLOR_SPACE_VOTION)
+COLOR_SPACE_DEFAULT = COLOR_SPACE_WALLGS
 COLOR_SPACE_ALIASES = {
-    "unreal": COLOR_SPACE_UNREAL,
-    "ue": COLOR_SPACE_UNREAL,
-    "mlslabs": COLOR_SPACE_UNREAL,
-    "mls": COLOR_SPACE_UNREAL,
+    "wallgs": COLOR_SPACE_WALLGS,
+    "wall": COLOR_SPACE_WALLGS,
+    "unreal": COLOR_SPACE_WALLGS,
+    "ue": COLOR_SPACE_WALLGS,
+    "wallgs_acescg": COLOR_SPACE_WALLGS_ACESCG,
+    "acescg": COLOR_SPACE_WALLGS_ACESCG,
+    "aces": COLOR_SPACE_WALLGS_ACESCG,
     "luma": COLOR_SPACE_LUMA,
     "lumaai": COLOR_SPACE_LUMA,
     "srgb": COLOR_SPACE_SRGB,
@@ -138,20 +159,109 @@ COLOR_SPACE_ALIASES = {
     "gamma": COLOR_SPACE_SRGB,
     "linear": COLOR_SPACE_LINEAR,
     "lin": COLOR_SPACE_LINEAR,
+    "votion": COLOR_SPACE_VOTION,
+    "votion_ue": COLOR_SPACE_VOTION,
+    "plugin": COLOR_SPACE_VOTION,
 }
 COLOR_SPACE_CHOICES = (
-    (COLOR_SPACE_UNREAL, "Unreal / MLSLabs (import-ready)"),
+    (COLOR_SPACE_VOTION, "Unreal / VotionSplat Export"),
+    (COLOR_SPACE_WALLGS, "Unreal / WallGS Pro (import-ready)"),
+    (COLOR_SPACE_WALLGS_ACESCG, "Unreal / WallGS Pro, OCIO ACES view (import-ready)"),
     (COLOR_SPACE_LUMA, "Unreal / Luma (import-ready)"),
     (COLOR_SPACE_SRGB, "3DGS / sRGB (Brush, Postshot, SuperSplat)"),
-    (COLOR_SPACE_LINEAR, "Linear (other real-time engines)"),
+    (COLOR_SPACE_LINEAR, "Linear Rec.709, tagged (other engines)"),
 )
-UNREAL_MIN_OPACITY = 0.02  # drop the faint haze both UE plugins sort through furniture
-UNREAL_MAX_ANISOTROPY = 64.0  # fatten hairline needles that span chair + window
-# LumaAIPlugin MaxNumGaussiansSingleChunk. Above this Luma uses ALumaScene (64 Niagara).
-LUMA_MAX_GAUSSIANS = 1_900_000
-UNREAL_MAX_GAUSSIANS = LUMA_MAX_GAUSSIANS  # alias; only the Luma preset applies the cap
-# Kept for the Linear extra / old baked PLYs; not applied to Unreal presets.
-MLSLABS_CONTRAST = 1.15
+VOTION_UE_SETUP = (
+    "Unreal / VotionSplat Export: drag splat.ply into the Content Browser with the Votion Splat plugin. "
+    "No settings. The file keeps the trained splats, and the plugin draws them with the same rule as this viewport."
+)
+# VotionSplat plugin header. The file is trained colour, unsoftened; the plugin rasterises it.
+VOTION_TAG_VERSION = 1
+VOTION_RASTERS = ("gsplat_antialiased", "gsplat_classic", "litegs_classic")
+LITEGS_NEAR_PLANE = 0.2
+GSPLAT_NEAR_PLANE = 0.01
+# Postshot colour tags in the PLY header; WallGS sets Source Color Space from them on import.
+COLOR_SPACE_TAGS = {
+    COLOR_SPACE_LINEAR: ("comment postshot.color.primaries=Rec709", "comment postshot.color.eotf=Linear"),
+}
+WALLGS_READS = {
+    COLOR_SPACE_WALLGS: "Legacy Appearance (untagged)",
+    COLOR_SPACE_WALLGS_ACESCG: "Legacy Appearance (untagged)",
+    COLOR_SPACE_SRGB: "Legacy Appearance (untagged)",
+    COLOR_SPACE_LINEAR: "Linear Rec.709",
+}
+# Unreal Post Process values the LUTs in docs/unreal were fitted for; regenerate the LUTs if changed.
+WALLGS_UE_EXPOSURE = -1.5
+WALLGS_UE_GAMMA = 1.4  # Color Grading > Global > Gamma; spreads the darks over the LUT's nodes
+WALLGS_UE_LUT = "Votion_WallGS_LUT.png"
+LUMA_EMISSION = 0.4  # Luma material gain
+LUMA_COLOR_MAX = 2.0  # trained display colour mapped to Luma's colour clamp of 1
+LUMA_UE_EXPOSURE = 2.32  # log2(LUMA_COLOR_MAX / LUMA_EMISSION)
+LUMA_UE_LUT = "Votion_Luma_LUT.png"
+_UE_LUT_IMPORT = "import the PNG with Texture Group ColorLookupTable"
+_UE_COMMON = (
+    "Lens > Local Exposure: Highlight Contrast 1, Shadow Contrast 1, Detail Strength 1; "
+    "Bloom Intensity 0, Lens Flares Intensity 0, Vignette Intensity 0; Color Grading > Misc: "
+    "Blue Correction 0, Expand Gamut 0, Tone Curve Amount 0"
+)
+_UE_FULL_DETAIL = (
+    "On the splat actor: Optimization > Preset Off (Spatial LOD drops distant splats and leaves dots), "
+    "Rendering Method Sorted Alpha, Splat Budget 0"
+)
+WALLGS_UE_SETUP = (
+    "Unreal / WallGS Pro: drag splat.ply into the Content Browser, choose Native Asset, place it at scale 1 "
+    f"(Source Color Space reads Legacy Appearance; keep every splat in the level untagged). {_UE_FULL_DETAIL}. "
+    "Colour match: "
+    "unbound Post Process Volume, Exposure Metering Mode Manual, Apply Physical Camera Exposure off, "
+    f"Exposure Compensation {WALLGS_UE_EXPOSURE}; {_UE_COMMON}; Color Grading > Global > Gamma "
+    f"{WALLGS_UE_GAMMA}; Color Grading LUT docs/unreal/{WALLGS_UE_LUT} "
+    f"({_UE_LUT_IMPORT}), LUT Intensity 1. Keep the deferred renderer."
+)
+OCIO_CONFIG_DEFAULT = Path(__file__).resolve().parents[2] / "VS_OCIO.ocio"
+OCIO_SOURCE = "ACEScg"
+OCIO_DISPLAY = "sRGB - Display"
+OCIO_VIEW = "ACES 1.0 - SDR Video"
+OCIO_WALLGS_SOURCE = "Votion WallGS Legacy"
+OCIO_VOTION_CONFIG_NAME = "Votion_VS_OCIO.ocio"
+
+
+def ocio_config() -> Path:
+    return Path(os.environ.get("VOTION_OCIO_CONFIG") or OCIO_CONFIG_DEFAULT)
+
+
+WALLGS_ACESCG_UE_SETUP = (
+    "Unreal / WallGS Pro, OCIO ACES view: the same untagged file as Unreal / WallGS Pro, so WallGS blends "
+    "it like the Votion preview. Import as Native Asset, scale 1 (Source Color Space reads Legacy "
+    "Appearance; remove any ACEScg- or Linear-tagged splat from the level, they switch every splat to "
+    f"linear blending). {_UE_FULL_DETAIL}. Viewport OCIO: config docs/unreal/{OCIO_VOTION_CONFIG_NAME} "
+    f"(your {OCIO_CONFIG_DEFAULT.name} plus one colour space), Source {OCIO_WALLGS_SOURCE}, Display "
+    f"{OCIO_DISPLAY}, View {OCIO_VIEW}; keep Project Settings > Rendering > Working Color Space at sRGB / "
+    "Rec709. Unbound Post Process Volume: Exposure Metering Mode Manual, Apply Physical Camera Exposure "
+    f"off, Exposure Compensation 0; {_UE_COMMON}; no Color Grading LUT (OCIO bypasses it)."
+)
+UNREAL_MIN_OPACITY = 0.02  # Luma: drop the faint haze Niagara sorts through furniture
+UNREAL_MAX_ANISOTROPY = 64.0  # Luma: fatten hairline needles that span chair + window
+# LumaAIPlugin MaxNumGaussiansSingleChunk. At or below it ALumaSceneSingle textures only
+# LUMA_UE_chunk_gaussians' chunk 0 (a central box); above it ALumaScene uses all 64 chunks.
+LUMA_SINGLE_CHUNK_MAX = 1_900_000
+LUMA_UE_SETUP = (
+    "Unreal / Luma colour match: unbound Post Process Volume, Exposure Metering Mode Manual, "
+    f"Apply Physical Camera Exposure off, Exposure Compensation {LUMA_UE_EXPOSURE}; {_UE_COMMON}; "
+    f"Color Grading LUT docs/unreal/{LUMA_UE_LUT} ({_UE_LUT_IMPORT}), LUT Intensity 1."
+)
+# HY-World export "Soften like the viewport". The app preview is gsplat antialiased at logical
+# pixels, then upscaled by the display scaling; WallGS / Luma draw classic at physical pixels.
+# Sizes are logical pixels at SOFTEN_FOCAL, seen from each splat's nearest training camera.
+SOFTEN_FOCAL = 960.0  # app viewport at its 1920 px cap, 90 deg horizontal
+SOFTEN_DPR = 1.5  # Windows display scaling on the Votion workstation
+SOFTEN_UE_EPS_PX2 = 0.3 / SOFTEN_DPR**2  # WallGS / Luma's own 0.3 px^2 low-pass
+SOFTEN_EXTRA_PX2 = 1.6  # baked footprint growth; least error vs the upscaled preview is 1.0-1.6
+HELP_SOFTEN = (
+    "The trainer fades splats thinner than a pixel, and the preview is upscaled by Windows display "
+    "scaling. Unreal (WallGS, Luma) draws every splat at full opacity and full resolution, so thin "
+    "splats show as needles and dots. On: each splat is widened slightly and its opacity rescaled to "
+    "match the preview, for every color space. Off: the trained splats as they are."
+)
 
 
 def color_space_from_key(key: str) -> str:
@@ -176,7 +286,7 @@ Max steps is yours — any integer >= 1, no product cap; epoch = steps / trainin
 Pause / Resume stay in-process; Stop kills the worker (job bar Stop is the same). SH warms up one band per ~10 % of the run (max 1000 steps); densify runs between 5 % and 80 % of the steps whatever the step count (LiteGS ~24 cycles; MCMC Compact one cycle per {MCMC_DENSIFY_INTERVAL} steps, splitting ~{int(MCMC_DELTA_SPLIT * 100)} % per cycle, so it grows steadily and ends well below LiteGS at the same budget).
 Viewport is the live LiteGS raster over shared memory (no PNG polling): LMB look, RMB pan, wheel dolly, zoom uncapped, Reset is the rails Star. Click a training camera to jump there; GT compare shows render | ground truth side by side. A bowed ground after an old Reconstruct is gnomonic cube-face GT — Reconstruct then Retrain, do not Continue.
 HUD: state, step / epoch, loss EMA, PSNR, Gaussians / budget, it/s, viewport fps, VRAM. Log drawer shows controller events (densify, prune, eps_curr).
-Export splat.ply is Inria PLY. Unreal / MLSLabs (default) keeps trained sRGB full SH, prunes opacity < {UNREAL_MIN_OPACITY}, fattens needles. Unreal / Luma is DC-only, same prune/needles, and keeps the strongest {LUMA_MAX_GAUSSIANS:,} Gaussians so Luma does not chunk into unsorted Niagara systems — place the _Baked blueprint, not _Dynamic. Switch to 3DGS / sRGB for Brush, Postshot, SuperSplat, or Linear for other real-time engines. Export compact prunes opacity < {COMPACT_MIN_OPACITY} and can drop the f_rest bands. Do not import moge/pointcloud.ply; do not scale the Gaussian actor.
+Export splat.ply is Inria PLY. Unreal / VotionSplat Export keeps the trained splats for the Votion Splat plugin. {VOTION_UE_SETUP} Unreal / WallGS Pro (default) keeps every Gaussian with trained sRGB full SH, untagged so WallGS blends in display space like the trainer. {WALLGS_UE_SETUP} Unreal / WallGS Pro, OCIO ACES view writes the same untagged file for Unreal's OCIO viewport. {WALLGS_ACESCG_UE_SETUP} Unreal / Luma prunes opacity < {UNREAL_MIN_OPACITY}, fattens needles, pads files of {LUMA_SINGLE_CHUNK_MAX:,} Gaussians or fewer with invisible ones (Luma's single-system import keeps only the central chunk and drops far walls), and always writes the 45 f_rest columns Luma 0.4.1 needs to find scale and rotation — place the _Baked blueprint, not _Dynamic. {LUMA_UE_SETUP} Switch to 3DGS / sRGB for Brush, Postshot, SuperSplat, or Linear Rec.709 for other real-time engines (tagged Rec.709 linear; not ACEScg). Export compact prunes opacity < {COMPACT_MIN_OPACITY} and can drop the f_rest bands. Do not import moge/pointcloud.ply; do not scale the Gaussian actor.
 If the LiteGS spike failed: Train disabled; Open COLMAP folder still works (Brush).
 {LICENSE_LINE}
 """

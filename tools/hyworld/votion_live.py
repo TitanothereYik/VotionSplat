@@ -209,7 +209,7 @@ class TrainerHook:
                     backgrounds=torch.tensor([BG], device=r.device, dtype=torch.float32) / 255.0,
                     render_mode="RGB",
                 )
-            return (colors[0, ..., :3].clamp(0, 1) * 255).to(torch.uint8).cpu().numpy()
+            return (colors[0, ..., :3].clamp(0, 1) * 255 + 0.5).to(torch.uint8).cpu().numpy()
         finally:
             r.is_training = was
 
@@ -382,7 +382,7 @@ class TrainerHook:
                         backgrounds=torch.zeros(1, 3, device=r.device, dtype=torch.float32),
                         render_mode="RGB",
                     )
-                image = (colors[0, ..., :3].clamp(0, 1) * 255).to(torch.uint8).cpu().numpy()
+                image = (colors[0, ..., :3].clamp(0, 1) * 255 + 0.5).to(torch.uint8).cpu().numpy()
                 imageio.imwrite(folder / f"{pose['name']}.png", image)
         finally:
             r.is_training = was

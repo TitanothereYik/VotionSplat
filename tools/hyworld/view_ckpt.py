@@ -53,10 +53,11 @@ def main() -> int:
                 height=h,
                 sh_degree=degree,
                 backgrounds=background,
+                packed=False,
                 rasterize_mode="antialiased",
                 render_mode="RGB",
             )
-        return (out[0, ..., :3].clamp(0, 1) * 255).to(torch.uint8).cpu().numpy()
+        return (out[0, ..., :3].clamp(0, 1) * 255 + 0.5).to(torch.uint8).cpu().numpy()
 
     count = int(means.shape[0])
     pick = torch.linspace(0, max(count - 1, 0), min(count, 8192), device=device).long()

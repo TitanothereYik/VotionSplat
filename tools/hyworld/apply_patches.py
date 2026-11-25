@@ -27,6 +27,18 @@ def _ensure(path: Path, old: str, new: str) -> None:
     path.write_text(text.replace(old, new, 1), encoding="utf-8")
 
 
+def _ensure_any(path: Path, olds: list[str], new: str) -> None:
+    """Like _ensure, for an edit that replaces an earlier version of itself."""
+    text = path.read_text(encoding="utf-8")
+    if new in text:
+        return
+    for old in olds:
+        if old in text:
+            path.write_text(text.replace(old, new, 1), encoding="utf-8")
+            return
+    raise SystemExit(f"patch anchor missing in {path.name}: {olds[0][:80]!r}")
+
+
 def patch(root: Path) -> None:
     traj = root / "traj_generate.py"
     _swap(traj, "SAM_BATCH_SIZE = 4", "SAM_BATCH_SIZE = 2")
@@ -420,6 +432,96 @@ def patch_live(root: Path) -> None:
         '        if os.environ.get("VOTION_FRAME", ""):\n'
         '            with open(os.environ["VOTION_FRAME"], encoding="utf-8") as _vf:\n'
         '                self.scene_scale = float(json.load(_vf)["scene_scale"])\n',
+    )
+    # HiRes frames: depth and normal maps stay at the Expand size, so scale them to the
+    # full frame, then cut the same random crop as the image.
+    _ensure(
+        opencv,
+        '        if self.patch_size is not None:\n'
+        '            # Random crop.\n'
+        '            h, w = image.shape[:2]\n'
+        '            x = np.random.randint(0, max(w - self.patch_size, 1))\n'
+        '            y = np.random.randint(0, max(h - self.patch_size, 1))\n'
+        '            image = image[y: y + self.patch_size, x: x + self.patch_size]\n'
+        '            K[0, 2] -= x\n'
+        '            K[1, 2] -= y\n',
+        '        _votion_full = image.shape[:2]\n'
+        '        _votion_crop = None\n'
+        '        if self.patch_size is not None:\n'
+        '            # Random crop.\n'
+        '            h, w = image.shape[:2]\n'
+        '            x = np.random.randint(0, max(w - self.patch_size, 1))\n'
+        '            y = np.random.randint(0, max(h - self.patch_size, 1))\n'
+        '            image = image[y: y + self.patch_size, x: x + self.patch_size]\n'
+        '            K[0, 2] -= x\n'
+        '            K[1, 2] -= y\n'
+        '            _votion_crop = (y, x)\n',
+    )
+    _ensure(
+        opencv,
+        '            "image_name": image_name,\n'
+        '        }\n',
+        '            "image_name": image_name,\n'
+        '        }\n'
+        '        if _votion_crop is not None:\n'
+        '            data["votion_crop"] = torch.tensor(_votion_crop, dtype=torch.long)\n',
+    )
+    _ensure_any(
+        opencv,
+        [
+            '                depth = load_16bit_png_depth(depth_path)\n'
+            '                if depth.shape[:2] != image.shape[:2]:\n'
+            '                    depth = cv2.resize(depth, (image.shape[1], image.shape[0]), interpolation=cv2.INTER_NEAREST)\n',
+            '                depth = load_16bit_png_depth(depth_path)\n',
+        ],
+        '                depth = load_16bit_png_depth(depth_path)\n'
+        '                if depth.shape[:2] != _votion_full:\n'
+        '                    depth = cv2.resize(depth, (_votion_full[1], _votion_full[0]), interpolation=cv2.INTER_NEAREST)\n'
+        '                if _votion_crop is not None:\n'
+        '                    depth = depth[_votion_crop[0]: _votion_crop[0] + image.shape[0], _votion_crop[1]: _votion_crop[1] + image.shape[1]]\n',
+    )
+    _ensure_any(
+        opencv,
+        [
+            '                assert normal.ndim == 3 and normal.shape[2] == 3\n'
+            '                if normal.shape[:2] != image.shape[:2]:\n'
+            '                    normal = cv2.resize(normal, (image.shape[1], image.shape[0]), interpolation=cv2.INTER_LINEAR)\n',
+            '                assert normal.ndim == 3 and normal.shape[2] == 3\n',
+        ],
+        '                assert normal.ndim == 3 and normal.shape[2] == 3\n'
+        '                if normal.shape[:2] != _votion_full:\n'
+        '                    normal = cv2.resize(normal, (_votion_full[1], _votion_full[0]), interpolation=cv2.INTER_LINEAR)\n'
+        '                if _votion_crop is not None:\n'
+        '                    normal = normal[_votion_crop[0]: _votion_crop[0] + image.shape[0], _votion_crop[1]: _votion_crop[1] + image.shape[1]]\n',
+    )
+    _ensure(
+        trainer,
+        '                        depths_gt = self.sky_depth_maps[image_id_val].unsqueeze(0).to(device)\n',
+        '                        _sky = self.sky_depth_maps[image_id_val]\n'
+        '                        if "votion_crop" in data:\n'
+        '                            _cy, _cx = (int(v) for v in data["votion_crop"].reshape(-1)[:2])\n'
+        '                            _sky = _sky[_cy: _cy + depths_gt.shape[-2], _cx: _cx + depths_gt.shape[-1]]\n'
+        '                        depths_gt = _sky.unsqueeze(0).to(device)\n',
+    )
+    sky = root / "gs" / "sky_depth.py"
+    _ensure(
+        sky,
+        '            gt_depth = torch.from_numpy(load_16bit_png_depth(depth_path)).float()\n',
+        '            _depth = load_16bit_png_depth(depth_path)\n'
+        '            _w, _h = parser.imsize_dict[camera_id]\n'
+        '            if _depth.shape[:2] != (_h, _w):\n'
+        '                import cv2\n'
+        '                _depth = cv2.resize(_depth, (_w, _h), interpolation=cv2.INTER_NEAREST)\n'
+        '            gt_depth = torch.from_numpy(_depth).float()\n',
+    )
+    _ensure(
+        sky,
+        '            normal_img = np.array(PILImage.open(normal_path)) / 255.0\n',
+        '            normal_img = np.array(PILImage.open(normal_path)) / 255.0\n'
+        '            _w, _h = parser.imsize_dict[camera_id]\n'
+        '            if normal_img.shape[:2] != (_h, _w):\n'
+        '                import cv2\n'
+        '                normal_img = cv2.resize(normal_img, (_w, _h), interpolation=cv2.INTER_LINEAR)\n',
     )
     print(f"live patches ok {root}")
 

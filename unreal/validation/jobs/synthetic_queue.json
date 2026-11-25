@@ -1,0 +1,25 @@
+{
+  "cameras": "D:\\Votion3DGS\\unreal\\validation\\jobs\\tests_cams.json",
+  "asset_dir": "/Game/Validation",
+  "out_root": "D:\\Votion3DGS\\unreal\\validation\\captures",
+  "settle_seconds": 3,
+  "quit": true,
+  "console": [
+    "r.VotionSplat.Enable 1",
+    "r.VotionSplat.LogViews 1",
+    "r.DefaultFeature.AutoExposure 0"
+  ],
+  "queue": [
+    {"name": "T1_center", "ply": "D:\\Votion3DGS\\unreal\\test_assets\\T1_center.ply", "profile": "synthetic"},
+    {"name": "T2_offaxis", "ply": "D:\\Votion3DGS\\unreal\\test_assets\\T2_offaxis.ply", "profile": "synthetic"},
+    {"name": "T3_aniso", "ply": "D:\\Votion3DGS\\unreal\\test_assets\\T3_aniso.ply", "profile": "synthetic"},
+    {"name": "T4_subpixel", "ply": "D:\\Votion3DGS\\unreal\\test_assets\\T4_subpixel.ply", "profile": "synthetic"},
+    {"name": "T4_subpixel_litegs", "ply": "D:\\Votion3DGS\\unreal\\test_assets\\T4_subpixel_litegs.ply", "profile": "litegs"},
+    {"name": "T5_stack", "ply": "D:\\Votion3DGS\\unreal\\test_assets\\T5_stack.ply", "profile": "synthetic"},
+    {"name": "T6_sh3", "ply": "D:\\Votion3DGS\\unreal\\test_assets\\T6_sh3.ply", "profile": "synthetic"},
+    {"name": "T6_sh3_litegs", "ply": "D:\\Votion3DGS\\unreal\\test_assets\\T6_sh3_litegs.ply", "profile": "litegs"},
+    {"name": "T7_near", "ply": "D:\\Votion3DGS\\unreal\\test_assets\\T7_near.ply", "profile": "synthetic"},
+    {"name": "T8_termination", "ply": "D:\\Votion3DGS\\unreal\\test_assets\\T8_termination.ply", "profile": "synthetic"},
+    {"name": "T9_big", "ply": "D:\\Votion3DGS\\unreal\\test_assets\\T9_big.ply", "profile": "synthetic"}
+  ]
+}

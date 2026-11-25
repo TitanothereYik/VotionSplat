@@ -75,6 +75,8 @@ def main() -> int:
         name = str(pose["name"])
         image = Image.open(folder / "novel" / f"{name}.png").convert("RGB")
         reference = Image.open(pose["ref"]).convert("RGB")
+        if reference.size != image.size:
+            reference = reference.resize(image.size, Image.LANCZOS)
         output = pipe(
             "remove degradation",
             image=image,

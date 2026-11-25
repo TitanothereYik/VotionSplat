@@ -1,0 +1,16 @@
+{
+  "name": "chart_depth",
+  "ply": "D:\\Votion3DGS\\docs\\unreal\\Votion_Plugin_Chart.ply",
+  "cameras": "D:\\Votion3DGS\\unreal\\validation\\jobs\\chart_front4k_cam.json",
+  "asset_dir": "/Game/Validation",
+  "out_dir": "D:\\Votion3DGS\\unreal\\validation\\captures\\chart_depth",
+  "settle_seconds": 3,
+  "quit": true,
+  "console": [
+    "r.VotionSplat.Enable 1",
+    "r.VotionSplat.DebugQuads 1",
+    "r.VotionSplat.DepthTest 1",
+    "r.VotionSplat.LogViews 1",
+    "r.DefaultFeature.AutoExposure 0"
+  ]
+}

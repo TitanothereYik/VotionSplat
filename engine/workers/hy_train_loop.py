@@ -11,10 +11,12 @@ import threading
 from pathlib import Path
 
 from engine.hyworld.argv import stage_argv
-from engine.hyworld.paths import gs_data, gs_result, hy_root
+from engine.hyworld.frames import CROP, FRAMES, build_frames
+from engine.hyworld.paths import gs_result, hy_root
 from engine.hyworld.train_run import (
     AUTOSAVE_SEC,
     DIFIX_LAMBDA,
+    DIFIX_EVERY,
     DIFIX_PY,
     DIFIX_VIEWS,
     build_merged,
@@ -110,6 +112,8 @@ class Loop:
         parser.add_argument("--mesh", action="store_true")
         parser.add_argument("--difix", action="store_true")
         parser.add_argument("--difix-views", type=int, default=DIFIX_VIEWS)
+        parser.add_argument("--difix-every", type=int, default=DIFIX_EVERY)
+        parser.add_argument("--frames", choices=FRAMES, default="expand")
         parser.add_argument("--result-dir", default="")
         parser.add_argument("--stop-at", type=int, default=-1)
         args = parser.parse_args(argv)
@@ -125,13 +129,21 @@ class Loop:
                 print("STATUS // No run to continue.", flush=True)
                 return 1
         else:
+            try:
+                data_dir = build_frames(args.scene, args.frames, log=lambda line: print(line, flush=True))
+            except (OSError, RuntimeError) as exc:
+                print(f"STATUS // training frames: {exc}", flush=True)
+                return 1
             run = new_run(
                 result,
                 steps=max(100, int(args.steps)),
                 mesh=bool(args.mesh),
                 difix=bool(args.difix),
                 views=max(1, int(args.difix_views)),
-                data_dir=gs_data(args.scene),
+                data_dir=data_dir,
+                every=max(1, int(args.difix_every)),
+                frames=args.frames,
+                patch=CROP.get(args.frames, 0),
             )
         threading.Thread(target=self._stdin, daemon=True).start()
         stop_once = int(args.stop_at) if int(args.stop_at) > 0 else None
@@ -200,7 +212,9 @@ class Loop:
             if start > 0 and not resume_pt(result, run).is_file():
                 print("STATUS // resume file missing", flush=True)
                 return 1
-            flags = trainer_flags(str(data_dir), str(result), int(run["max_steps"]), bool(run["mesh"]))
+            flags = trainer_flags(
+                str(data_dir), str(result), int(run["max_steps"]), bool(run["mesh"]), patch=int(run.get("patch") or 0)
+            )
             code = self._run(stage_argv("world_gs_trainer", flags), env, forward=True)
             if self._stop:
                 return 0

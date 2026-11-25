@@ -45,3 +45,22 @@ vendor/difix3d/**
 
 # Downloaded vendor archives. The extracted source is under vendor/.
 _hy_fetch/
+
+# Unreal host project build output and validation captures
+unreal/**/Binaries/
+unreal/**/Intermediate/
+unreal/**/Saved/
+unreal/**/DerivedDataCache/
+unreal/**/.vs/
+unreal/**/*.sln
+unreal/validation/captures/
+unreal/validation/refs/
+unreal/validation/reports/
+unreal/dist/
+unreal/test_assets/
+unreal/backup/
+unreal/validation/scenes/*.ply
+unreal/**/Content/Validation/*.uasset
+
+# VotionSplat has its own git repository.
+unreal/VotionSplatHost/Plugins/VotionSplat/

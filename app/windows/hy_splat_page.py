@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QUrl, Signal
-from PySide6.QtGui import QColor, QDesktopServices, QPalette
+from PySide6.QtGui import QColor, QDesktopServices, QPalette, QStandardItem, QStandardItemModel
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 
 from app.widgets.sparkline import Sparkline
 from app.widgets.splat_view import SplatLiveView
+from engine.hyworld.frames import CROP, frame_options
 from engine.hyworld.paths import gs_data, gs_result, hy_root, latest_checkpoint, votion_dir
 from engine.hyworld.train_run import DIFIX_PY, DIFIX_SRC, continue_info
 from engine.splat import defaults as D
@@ -90,13 +91,22 @@ class HySplatPage(QWidget):
         self.max_steps.editingFinished.connect(self._normalize_fields)
         r.addWidget(self.max_steps)
         r.addWidget(_hint("Train starts over from the dataset. Continue finishes the last run with its own step count."))
+        r.addWidget(_lab("Training frames"))
+        self._frames_model = QStandardItemModel(self)
+        self._frame_rows: list[dict] = []
+        self.frames = QComboBox()
+        self.frames.setModel(self._frames_model)
+        self.frames.currentIndexChanged.connect(lambda _i: self._frames_note())
+        r.addWidget(self.frames)
+        self.frames_hint = _hint("")
+        r.addWidget(self.frames_hint)
         self.mesh = QCheckBox("Export mesh at the end (slow)")
         r.addWidget(self.mesh)
         self.difix = QCheckBox("Difix3D+ refine (evaluation only)")
         self.difix.setToolTip(
             "Renders views between the paths, cleans them with NVIDIA Difix and trains on them. "
             "NVIDIA licence: research and evaluation only, not for commercial use. "
-            "Adds about 2 to 4 minutes per round, 5 rounds."
+            "One round every 2000 steps, about 2 minutes each."
         )
         if not DIFIX_PY.is_file() or not DIFIX_SRC.is_dir():
             self.difix.setEnabled(False)
@@ -127,7 +137,17 @@ class HySplatPage(QWidget):
         self.color_space = QComboBox()
         for key, label in D.COLOR_SPACE_CHOICES:
             self.color_space.addItem(label, key)
+        default = self.color_space.findData(D.COLOR_SPACE_DEFAULT)
+        self.color_space.setCurrentIndex(default if default >= 0 else 0)
+        self.color_space.setToolTip(
+            D.VOTION_UE_SETUP + "\n\n" + D.WALLGS_UE_SETUP + "\n\n" + D.WALLGS_ACESCG_UE_SETUP + "\n\n" + D.LUMA_UE_SETUP
+        )
+        self.color_space.currentIndexChanged.connect(self._sync_soften)
         r.addWidget(self.color_space)
+        self.soften = QCheckBox("Soften like the viewport (no needles)")
+        self.soften.setChecked(True)
+        self.soften.setToolTip(D.HELP_SOFTEN)
+        r.addWidget(self.soften)
         self.btn_export = QPushButton("Export splat.ply")
         self.btn_export.setObjectName("btnGhost")
         self.btn_export.clicked.connect(lambda: self._emit("export"))
@@ -228,6 +248,11 @@ class HySplatPage(QWidget):
             return D.color_space_from_key(str(data))
         return D.COLOR_SPACE_DEFAULT
 
+    def _sync_soften(self) -> None:
+        votion = self._color_space_key() == D.COLOR_SPACE_VOTION
+        self.soften.setEnabled(self.color_space.isEnabled() and not votion)
+        self.soften.setToolTip("Not used by the Votion plugin preset" if votion else D.HELP_SOFTEN)
+
     def _emit(self, mode: str) -> None:
         self._normalize_fields()
         scene = self._scene_name()
@@ -236,11 +261,53 @@ class HySplatPage(QWidget):
                 "__hy_train__", scene, str(self._steps()),
                 "1" if self.mesh.isChecked() else "0",
                 "1" if self.difix.isChecked() else "0",
+                self._frames_key(),
             ])
         elif mode == "continue":
             self.requestJob.emit(["__hy_train_continue__", scene])
         elif mode == "export":
-            self.requestJob.emit(["__hy_export__", scene, self._color_space_key()])
+            self.requestJob.emit([
+                "__hy_export__", scene, self._color_space_key(),
+                "0" if self._color_space_key() == D.COLOR_SPACE_VOTION else ("1" if self.soften.isChecked() else "0"),
+            ])
+
+    def _frames_key(self) -> str:
+        return str(self.frames.currentData() or "expand")
+
+    def _fill_frames(self, scene: str) -> None:
+        keep = self._frames_key()
+        self._frame_rows = frame_options(scene)
+        self.frames.blockSignals(True)
+        self._frames_model.clear()
+        pick = 0
+        for index, row in enumerate(self._frame_rows):
+            item = QStandardItem(row["label"])
+            item.setData(row["key"], Qt.ItemDataRole.UserRole)
+            item.setEnabled(bool(row["ok"]))
+            if row["note"]:
+                item.setToolTip(row["note"])
+            self._frames_model.appendRow(item)
+            if row["key"] == keep and row["ok"]:
+                pick = index
+        self.frames.setCurrentIndex(pick)
+        self.frames.blockSignals(False)
+        self._frames_note()
+
+    def _frames_note(self) -> None:
+        key = self._frames_key()
+        lines = []
+        if key != "expand":
+            lines.append(
+                "Upscaled frames replace the Expand frames. Panorama and polar views stay at the Expand size. "
+                "Each step renders more pixels, so training is slower."
+            )
+        if key in CROP:
+            lines.append(
+                f"Full 4x frames do not fit in 24 GB, so each step trains on a random {CROP[key]}x{CROP[key]} crop "
+                "of the frame. Use more steps so every part of the frame is covered."
+            )
+        lines.extend(row["note"] for row in self._frame_rows if row["note"] and row["key"] != "expand")
+        self.frames_hint.setText(" ".join(lines))
 
     def _on_view_changed(self, payload: dict) -> None:
         if self._worker_kind:
@@ -399,8 +466,11 @@ class HySplatPage(QWidget):
         self.btn_stop.setEnabled(self._busy)
         self.btn_export.setEnabled(ckpt is not None and not self._busy)
         self.color_space.setEnabled(ckpt is not None and not self._busy)
+        self._sync_soften()
         installed = DIFIX_PY.is_file() and DIFIX_SRC.is_dir()
         self.difix.setEnabled(not self._busy and installed)
+        self._fill_frames(scene)
+        self.frames.setEnabled(ready and not self._busy)
         lines = []
         if not ready:
             lines.append("Build the dataset first.")
@@ -410,6 +480,8 @@ class HySplatPage(QWidget):
             lines.append(f"Checkpoint {ckpt.name}." + (f" Exported {ply}." if ply.is_file() else ""))
         if info["ok"]:
             extra = f"Continue picks up at step {info['next_step']} of {info['max_steps']}"
+            if info["frames"] != "expand":
+                extra += f" on HiRes {info['frames'][1:]}x frames"
             if info["difix"]:
                 extra += " with Difix"
             lines.append(extra + ".")
