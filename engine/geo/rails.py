@@ -2,7 +2,7 @@
 
 P2 wrote a single ``rails/rail_00.json`` plus ``control/control_video.mp4``.
 P3 gives each rail its own json and control folder so four rails cannot clobber
-a shared ``condition_dir`` (SplatKit HiRes tooltip).
+a shared ``condition_dir``.
 """
 
 from __future__ import annotations

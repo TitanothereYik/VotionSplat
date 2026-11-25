@@ -217,7 +217,7 @@ class PanoramaPage(QWidget):
         self.hfov.valueChanged.connect(self._on_hfov_slider)
         self.hfov_edit.valueChanged.connect(self._on_hfov_edit)
         r.addWidget(self.hfov)
-        r.addWidget(_hint("Type or drag. MickmumpitzPanoWarp INPUT_TYPES 10–170, step 0.5."))
+        r.addWidget(_hint("Type or drag. Horizontal field of view, 10–170, step 0.5."))
 
         r.addWidget(_lab("Surroundings"))
         self.surr_type = QRadioButton("Type a sentence")

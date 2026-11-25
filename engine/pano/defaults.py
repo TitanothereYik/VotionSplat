@@ -1,4 +1,4 @@
-"""Copied from the Krea JSON + Mickmumpitz panorama_tools INPUT_TYPES. Do not invent names."""
+"""Panorama widget values ported from the Krea graph and the panorama node pack (MIT, pin 4d5ff7c). See THIRD_PARTY_NOTICES.md. Do not invent names."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ OSTRIS_NEGATIVE = "ugly, low quality"
 # FluxKontextMultiReferenceLatentMethod nodes 47 and 49
 FLUX_REF_METHOD = "index_timestep_zero"
 
-# MickmumpitzPanoWarp / PerspToErpWarp at mickmumpitz-nodes 4d5ff7c.
+# PerspToErpWarp at panorama-nodes pin 4d5ff7c.
 # JSON widgets: [2048, 1024, 1, 70, 0, 0, 0, 2, 10, 0.55, "#000000"]
 WARP_LENGTH = 1
 H_FOV_DEG_DEFAULT = 70.0
@@ -43,19 +43,19 @@ WARP_FILL_COLOR = "#000000"
 PHOTO_FEATHER_PX = 128
 PHOTO_PYRAMID_LEVELS = 5
 
-# MickmumpitzPanoHarmonizeBoundary JSON [1, 8, 800, true]
+# HarmonizeBoundary JSON [1, 8, 800, true]
 HARMONIZE_STRENGTH = 1.0
 HARMONIZE_SOLVE_SCALE = 8
 HARMONIZE_ITERATIONS = 800
 HARMONIZE_WRAP_HORIZONTAL = True
 
-# MickmumpitzPanoKrea2Reference JSON [8]
+# Krea2Reference JSON [8]
 KREA2_REFERENCE_MAX_MEGAPIXELS = 8.0
 
-# MickmumpitzPanoRollHorizontal JSON [0.5]
+# RollHorizontal JSON [0.5]
 ROLL_FRACTION = 0.5
 
-# MickmumpitzPanoSeamMask JSON [2048, 1024, 160, 32]
+# SeamMask JSON [2048, 1024, 160, 32]
 SEAM_STRIP_WIDTH = 160
 SEAM_STRIP_FEATHER = 32
 

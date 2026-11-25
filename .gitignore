@@ -27,8 +27,6 @@ vendor/comfyui/**
 !vendor/comfyui/.gitkeep
 vendor/ultimatesd/**
 !vendor/ultimatesd/.gitkeep
-vendor/mickmumpitz-nodes/**
-!vendor/mickmumpitz-nodes/.gitkeep
 vendor/ostris-edit/**
 !vendor/ostris-edit/.gitkeep
 vendor/fused_ssim/**

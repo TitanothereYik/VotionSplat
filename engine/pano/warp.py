@@ -1,4 +1,4 @@
-"""Mickmumpitz PerspToErpWarp.build at 4d5ff7c (worker only). No erp_guide / cv2."""
+"""Perspective-to-ERP warp (worker only). Ported from the panorama node pack (MIT), pin 4d5ff7c. See THIRD_PARTY_NOTICES.md. No erp_guide / cv2."""
 
 from __future__ import annotations
 

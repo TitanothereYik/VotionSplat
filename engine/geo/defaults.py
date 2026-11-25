@@ -1,6 +1,6 @@
-"""Plot Camera defaults copied from SMPL CAMERA PLOT nodes.
+"""Plot Camera defaults copied from the SMPL CAMERA PLOT nodes.
 
-SplatKit INPUT_TYPES at vendor pin f59de25: DatasetProject optional bool is ``reset``.
+Ported from ComfyUI-SplatKit (MIT), pin f59de25. See THIRD_PARTY_NOTICES.md. DatasetProject optional bool is ``reset``.
 moge_level 9 is the graph widget, not fps. Overlay point_budget 4000 (min 500, max 40000).
 P3: four SMPL knot sets (nodes 27, 122, 133, 144) + optional 5th (node 157).
 """
@@ -40,7 +40,7 @@ STRAIGHT_RAILS = (
 )
 MIN_RAILS = 1  # rail 1 (SMPL node 27) stays; user may remove 2–5
 MAX_RAILS = 5  # graph CAMERA 1–4 + optional Add-to-dataset id 157
-SUGGEST_COUNT = 4  # SplatKit suggest_paths default; function cap is 8
+SUGGEST_COUNT = 4  # suggest_paths default from the pin; function cap is 8
 
 # SMPL demo rails — copy verbatim from docs/Votion_3DGS_2.0_Phase3.md (then let the user edit).
 SMPL_RAILS = (

@@ -1,4 +1,4 @@
-"""Mickmumpitz Krea2FullResReference.run at 4d5ff7c. Worker only; needs Comfy on path."""
+"""Full-resolution Krea 2 reference. Ported from the panorama node pack (MIT), pin 4d5ff7c. See THIRD_PARTY_NOTICES.md. Worker only; needs the ComfyUI library on path."""
 
 from __future__ import annotations
 

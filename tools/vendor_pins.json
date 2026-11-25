@@ -11,12 +11,6 @@
     "sha": "627c871f14532b164331f08d0eebfbf7404161ee",
     "source": "Krea json node 77 properties.ver"
   },
-  "mickmumpitz_nodes": {
-    "repo": "https://github.com/mickmumpitz/ComfyUI-Mickmumpitz-Nodes",
-    "graph_pin": "e3df7e1199c8170335fe8c7d3dc0ecf1839d2784",
-    "pano_nodes_sha": "4d5ff7c433884631599c3b2d82011a2cbbeea37e",
-    "note": "Graph pin e3df7e1 has no panorama_tools. INPUT_TYPES for MickmumpitzPanoWarp / Harmonize / Krea2Reference / Roll / SeamMask read from origin/main 4d5ff7c. Warp widget list matches the JSON array."
-  },
   "ostris_edit": {
     "repo": "https://github.com/ostris/ComfyUI-Krea2-Ostris-Edit",
     "sha": "7756566160c4a1b24bb1bd9f0ff3ced1a83d7547",

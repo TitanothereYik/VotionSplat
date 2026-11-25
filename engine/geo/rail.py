@@ -1,6 +1,6 @@
 """Catmull-Rom rail + camera-to-world stack.
 
-Copied from SplatKit ``nodes/camera_plot.py`` at pin f59de25
+Ported from ComfyUI-SplatKit (MIT) ``nodes/camera_plot.py``, pin f59de25. See THIRD_PARTY_NOTICES.md.
 (``_camplot_catmull_rom``, ``_camplot_catmull_rom_tangent``, ``_camplot_c2w_stack``,
 ``_camplot_fill_targets``). No ComfyUI imports.
 

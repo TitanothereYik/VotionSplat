@@ -41,7 +41,7 @@ def _from_single_file(cls, path: Path, **kwargs):
 
 
 def dequant_fp8_scaled(path: Path) -> dict:
-    """Comfy fp8_e4m3fn_scaled: weight * scale_weight, then bfloat16 for UMT5."""
+    """fp8_e4m3fn_scaled checkpoint: weight * scale_weight, then bfloat16 for UMT5."""
     from safetensors.torch import load_file
 
     state = load_file(str(path))

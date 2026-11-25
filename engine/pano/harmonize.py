@@ -1,4 +1,4 @@
-"""Mickmumpitz HarmonizeBoundary.run at 4d5ff7c. Worker only."""
+"""Boundary harmonize. Ported from the panorama node pack (MIT), pin 4d5ff7c. See THIRD_PARTY_NOTICES.md. Worker only."""
 
 from __future__ import annotations
 

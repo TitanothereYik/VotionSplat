@@ -1,5 +1,5 @@
-"""CPU warp preview for the Qt process. Same pinhole math as Mickmumpitz PerspToErpWarp
-(mickmumpitz-nodes 4d5ff7c). No torch — the Qt process must not import torch for inference.
+"""CPU warp preview for the Qt process. Same pinhole math as the ported perspective-to-ERP warp
+(pin 4d5ff7c; see THIRD_PARTY_NOTICES.md). No torch — the Qt process must not import torch for inference.
 Fill for the viewport is green #00ff00 (dummy / PRD canvas), not the graph control fill.
 """
 
@@ -122,7 +122,7 @@ def erp_to_rectilinear(
 ) -> Image.Image:
     """Pinhole look from inside an equirectangular sphere (HDRI-style). No torch.
 
-    Camera at the origin, +Z forward / +Y up, same lon/lat as Mickmumpitz ERP.
+    Camera at the origin, +Z forward / +Y up, same lon/lat as the ERP warp.
     yaw: look right is positive. pitch: look up is positive. Horizontal wrap.
     """
     if isinstance(erp, Image.Image):

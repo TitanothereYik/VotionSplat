@@ -347,7 +347,7 @@ class KreaSession:
     ) -> Image.Image:
         src = _pil_to_image(photo)
         print(
-            f"STATUS // MickmumpitzPanoWarp {D.GENERATE_WIDTH}x{D.GENERATE_HEIGHT} h_fov={h_fov_deg}",
+            f"STATUS // PanoWarp {D.GENERATE_WIDTH}x{D.GENERATE_HEIGHT} h_fov={h_fov_deg}",
             flush=True,
         )
         job_progress(2, 8, "h_fov warp")

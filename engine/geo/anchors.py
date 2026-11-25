@@ -1,4 +1,4 @@
-"""Anchor / look-at parsers copied from SplatKit nodes/camera_plot.py at pin f59de25.
+"""Anchor / look-at parsers. Ported from ComfyUI-SplatKit (MIT) nodes/camera_plot.py, pin f59de25. See THIRD_PARTY_NOTICES.md.
 
 No ComfyUI imports. Keep behavior identical to ``_camplot_parse_anchors_ext``.
 """
@@ -82,7 +82,7 @@ def format_anchors_xyz(positions: Any) -> str:
 
 
 def _fill_nan_targets(positions: np.ndarray, targets: np.ndarray) -> np.ndarray:
-    """Same rule as SplatKit ``_camplot_fill_targets`` (next-segment fallback)."""
+    """Same rule as ``_camplot_fill_targets`` (next-segment fallback)."""
     n = positions.shape[0]
     out = np.array(targets, dtype=np.float64, copy=True)
     for i in range(n):

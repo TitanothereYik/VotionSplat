@@ -1,6 +1,5 @@
 {
   "source": "docs/Votion_3DGS_2.0_Index.md \u2014 Model filenames (from the two ComfyUI graphs). No invented sizes. Optional nvfp4 and GGUF Q4 omitted (not 3090 Quality default). SphereSfM binary waits until Reconstruct. Florence Hub is in the florence object, not this files list.",
-  "comfy_root": "D:\\ComfyUI_windows_portable_360",
   "dest_root": "models",
   "files": [
     {

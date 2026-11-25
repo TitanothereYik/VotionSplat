@@ -32,7 +32,7 @@ class JobCancelled(Exception):
 
 
 def python_executable() -> str:
-    """Interpreter for workers — the venv that launched the app, not Comfy python_embeded.
+    """Interpreter for workers — the venv that launched the app.
 
     If the UI was started with pythonw.exe, workers still use python.exe so stdout pipes.
     """

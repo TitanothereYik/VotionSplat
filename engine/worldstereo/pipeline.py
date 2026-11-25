@@ -159,7 +159,7 @@ def build_dit(
 
 
 def load_clip_vision(cfg_root: Path):
-    """Comfy clip_vision_h keys are ``vision_model.*``. CLIPVisionModel is not."""
+    """clip_vision_h checkpoint keys are ``vision_model.*``. CLIPVisionModel is not."""
     from safetensors.torch import load_file
     from transformers import CLIPVisionConfig, CLIPVisionModel
 

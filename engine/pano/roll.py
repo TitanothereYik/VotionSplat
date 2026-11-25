@@ -1,4 +1,4 @@
-"""MickmumpitzPanoRollHorizontal + PanoSeamMask (4d5ff7c). Torch tensors, worker only."""
+"""Horizontal roll and seam mask. Ported from the panorama node pack (MIT), pin 4d5ff7c. See THIRD_PARTY_NOTICES.md. Torch tensors, worker only."""
 
 from __future__ import annotations
 

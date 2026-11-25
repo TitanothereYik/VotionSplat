@@ -1,4 +1,4 @@
-"""Copy-if-exists from ComfyUI models, else Hugging Face, else MISSING_<id> + Index URL.
+"""Download missing models from Hugging Face, else MISSING_<id> + Index URL.
 
 Lookup order per docs/Votion_3DGS_2.0_Phase0.md. No invented file sizes.
 Free-space check for WAN 14B uses Hugging Face metadata (measured), not a guessed GB.
@@ -24,7 +24,6 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MANIFEST = Path(__file__).resolve().parent / "model_manifest.json"
-DEFAULT_COMFY = Path(r"D:\ComfyUI_windows_portable_360")
 LEGACY_HF_HUB = Path.home() / ".cache" / "huggingface" / "hub"
 
 
@@ -160,11 +159,6 @@ def load_manifest(path: Path) -> dict:
 
 def dest_path(root: Path, entry: dict) -> Path:
     return root / "models" / entry["local_relative_path"]
-
-
-def comfy_path(comfy_root: Path, entry: dict) -> Path:
-    folder = Path(entry["local_relative_path"]).parts[0]
-    return comfy_root / "ComfyUI" / "models" / folder / entry["filename"]
 
 
 def is_ready(path: Path) -> bool:
@@ -324,7 +318,7 @@ def download_hf(entry: dict, dest: Path, cache: Path) -> None:
     log(f"{entry['id']}: HF {kind} -> {dest}")
 
 
-def fetch_one(entry: dict, root: Path, comfy_root: Path, cache: Path) -> str:
+def fetch_one(entry: dict, root: Path, cache: Path) -> str:
     dest = dest_path(root, entry)
 
     if is_ready(dest):
@@ -333,16 +327,6 @@ def fetch_one(entry: dict, root: Path, comfy_root: Path, cache: Path) -> str:
         progress(entry["id"], size, size, 100)
         progress(entry["id"], "done")
         log(f"{entry['id']}: already READY {dest}")
-        return "READY"
-
-    src = comfy_path(comfy_root, entry)
-    if is_ready(src):
-        size = src.stat().st_size
-        progress(entry["id"], "start", size)
-        kind = copy_or_hardlink(src, dest)
-        progress(entry["id"], size, size, 100)
-        progress(entry["id"], "done")
-        log(f"{entry['id']}: Comfy {kind} {src} -> {dest}")
         return "READY"
 
     reuse = lookup_cached_hf(entry, [cache / "hub", LEGACY_HF_HUB])
@@ -358,7 +342,7 @@ def fetch_one(entry: dict, root: Path, comfy_root: Path, cache: Path) -> str:
     known = hf_size_bytes(entry)
     total = int(known) if known else 0
     progress(entry["id"], "start", total)
-    log(f"{entry['id']}: not in Comfy ({src}); Hugging Face {entry['url']}")
+    log(f"{entry['id']}: not cached; Hugging Face {entry['url']}")
     if entry.get("check_free_space"):
         if known is None:
             progress(entry["id"], "fail")
@@ -406,14 +390,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--set", choices=("p1", "p2", "all"), default="p1")
     parser.add_argument("--root", type=Path, default=REPO_ROOT)
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
-    parser.add_argument("--comfy-root", type=Path, default=DEFAULT_COMFY)
     parser.add_argument("--status-only", action="store_true")
     args = parser.parse_args(argv)
 
     root = args.root.resolve()
     cache = apply_hf_cache_env(root)
     manifest = load_manifest(args.manifest)
-    comfy_root = args.comfy_root
 
     if args.status_only:
         print_status(manifest, root, args.set)
@@ -421,12 +403,11 @@ def main(argv: list[str] | None = None) -> int:
 
     log(f"STATUS // download set={args.set}")
     log(f"dest={root / 'models'}")
-    log(f"comfy={comfy_root / 'ComfyUI' / 'models'}")
     log_disk_map(root, cache)
 
     worst = 0
     for entry in select_entries(manifest, args.set):
-        token = fetch_one(entry, root, comfy_root, cache)
+        token = fetch_one(entry, root, cache)
         log(f"{entry['label']}\t{token}")
         if token.startswith("MISSING_"):
             worst = 1
